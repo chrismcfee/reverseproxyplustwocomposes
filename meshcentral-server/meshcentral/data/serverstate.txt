@@ -1,0 +1,9 @@
+time=1698466027041
+state=running
+server-pid=52
+server-parent-pid=8
+redirect-port=80
+mps-port=4433
+mps-name=linodeproofofconcept.sobe.name
+servername=linodeproofofconcept.sobe.name
+https-port=443

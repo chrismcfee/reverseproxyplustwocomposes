@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx_container
+    hostname: nginx
+    ports:
+      - "443:443"
+    command: /bin/bash -c "mkdir -p /etc/nginx/conf.d/sitesenabled && cd /etc/nginx/conf.d/sitesenabled && ln -s ../sites-available/*.conf . && nginx -g 'daemon off;'"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-selfsigned.crt:/etc/nginx/ssl/nginx-selfsigned.crt:ro
+      - ./nginx-selfsigned.key:/etc/nginx/ssl/nginx-selfsigned.key:ro
+      - ./nginx-meshcentral-service.conf:/etc/nginx/conf.d/sites-available/mesh.conf
+      - ./nginx-mender-service.conf:/etc/nginx/conf.d/sites-available/mender.conf
+
