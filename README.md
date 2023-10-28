@@ -1,2 +1,1 @@
-# reverseproxyplustwocomposes
-linode proof of concept
+TODO: get mender to work behind nginx reverse proxy
