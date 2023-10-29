@@ -11,8 +11,6 @@ SERVICES="\
   mender-create-artifact-worker \
   mender-workflows-server \
   mender-workflows-worker \
-  mender-deviceconnect \
-  mender-deviceconfig \
 "
 DB_SERVICES="\
   mender-mongo

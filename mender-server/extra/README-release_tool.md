@@ -3,15 +3,13 @@
 This tool is for internal consumption only, and should not be used outside of
 Mender development.
 
-The `release_tool.py` script has four main modes of operation:
+The `release_tool.py` script has three main modes of operation:
 
 * Querying the version of a component in the docker-compose environment.
 
 * Setting the version of a component in the docker-compose environment.
 
-* Tagging, building, and releasing Mender stable releases
-
-* Tagging Hosted Mender releases
+* Tagging, building, and releasing.
 
 
 ## Querying docker-compose versions
@@ -115,7 +113,7 @@ carried out.
    type 'T' into the menu. What this will do is to generate new build tags in
    all the repositories that need them, and push these.
 
-2. Next, you will want to build using these tags in GitLab. For that type 'B'
+2. Next, you will want to build using these tags in Jenkins. For that type 'B'
    into the menu. This will give you a series of build parameters that you can
    check for validity. If you answer no, you'll get the chance to change them,
    otherwise proceed by saying yes.
@@ -186,12 +184,12 @@ files. Then it will tag the using this new commit. See the section about
 illustration about what this means for the Git history.
 
 
-#### Trigger new GitLab build
+#### Trigger new Jenkins build
 
-This will trigger a new GitLab build using the current build tags.
+This will trigger a new Jenkins build using the current build tags.
 
 In addition to the revisions to build, there are additional default parameters
-passed to GitLab. These can be changed by answering no when asked to submit the
+passed to Jenkins. These can be changed by answering no when asked to submit the
 build and changing the parameters of the user's choice. Parameters that don't
 describe component versions will be saved and used in subsequent builds.
 
@@ -355,30 +353,3 @@ List of YAML files that are checked:
 
 * `docker-compose*.yml`
 * `other-components.yml` (non-Docker components)
-
-## Tagging for Hosted Mender
-
-For the hosted Mender release workflow, the `release_tool.py` script is only
-used for tagging the final versions. The build and test is carried out outside
-of the tool.
-
-Once the software versions deployed in staging have passed all our QA and is
-ready to be deployed into production, `release_tool.py` can be used to generate
-the production tags.
-
-This process can only be done from `staging` version in integration repo.
-
-Running the command:
-
-```
-$ ./release_tool --hosted-release
-```
-
-The tool will generate tags of the form `saas-vYYYY.MM.DD` for all backend
-repositories from their respective `staging` branches.
-
-Alternatively, a custom version can be specified with:
-
-```
-$ ./release_tool --hosted-release --version my-custom-version
-```

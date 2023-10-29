@@ -1,10 +1,10 @@
-# Copyright 2022 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,17 +12,18 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import json
 import pytest
+
+import subprocess
 import tempfile
-import uuid
+import json
 
 from .. import conftest
 from ..common_setup import enterprise_no_client
 from ..MenderAPI import logger, Authentication, DeviceAuthV2, Deployments
+from testutils.infra.device import MenderDevice
 from testutils.infra.cli import CliTenantadm
-from testutils.common import Tenant, User, new_tenant_client
-from .common_artifact import get_script_artifact
+from testutils.common import Tenant, User
 from .mendertesting import MenderTesting
 
 
@@ -49,7 +50,19 @@ fi
 # Successful update after three attempts
 exit 0
 """
-    return get_script_artifact(script, artifact_name, device_type, output_path)
+
+    with tempfile.NamedTemporaryFile(suffix="testdeploymentretries") as tf:
+        tf.write(script)
+        tf.seek(0)
+        out = tf.read()
+        logger.info(f"Script: {out}")
+        script_path = tf.name
+
+        cmd = f"mender-artifact write module-image -T script -n {artifact_name} -t {device_type} -o {output_path} -f {script_path}"
+        logger.info(f"Executing command: {cmd}")
+        subprocess.check_call(cmd, shell=True)
+
+        return output_path
 
 
 @pytest.mark.usefixtures("enterprise_no_client")
@@ -72,12 +85,9 @@ class TestDeploymentRetryEnterprise(MenderTesting):
         env = enterprise_no_client
 
         # Create an enterprise plan tenant
-        uuidv4 = str(uuid.uuid4())
-        tname = "test.mender.io-{}".format(uuidv4)
-        email = "some.user+{}@example.com".format(uuidv4)
-        u = User("", email, "whatsupdoc")
+        u = User("", "bugs.bunny@acme.org", "whatsupdoc")
         cli = CliTenantadm(containers_namespace=env.name)
-        tid = cli.create_org(tname, u.name, u.pwd, plan="enterprise")
+        tid = cli.create_org("enterprise-tenant", u.name, u.pwd, plan="enterprise")
         tenant = cli.get_tenant(tid)
         tenant = json.loads(tenant)
         ttoken = tenant["tenant_token"]
@@ -89,14 +99,15 @@ class TestDeploymentRetryEnterprise(MenderTesting):
         auth = Authentication(name="enterprise-tenant", username=u.name, password=u.pwd)
         auth.create_org = False
         auth.reset_auth_token()
-        devauth = DeviceAuthV2(auth)
-        deploy = Deployments(auth, devauth)
+        auth_v2 = DeviceAuthV2(auth)
+        deploy = Deployments(auth, auth_v2)
 
         # Add a client to the tenant
-        device = new_tenant_client(
-            enterprise_no_client, "mender-client", tenant.tenant_token
+        enterprise_no_client.new_tenant_client(
+            "retry-test-container", tenant.tenant_token
         )
-        devauth.accept_devices(1)
+        auth_v2.accept_devices(1)
+        device = MenderDevice(env.get_mender_clients()[0])
 
         with tempfile.NamedTemporaryFile() as tf:
 
@@ -107,7 +118,7 @@ class TestDeploymentRetryEnterprise(MenderTesting):
             deploy.upload_image(artifact)
 
             devices = list(
-                set([device["id"] for device in devauth.get_devices_status("accepted")])
+                set([device["id"] for device in auth_v2.get_devices_status("accepted")])
             )
             assert len(devices) == 1
 
@@ -121,7 +132,7 @@ class TestDeploymentRetryEnterprise(MenderTesting):
             deploy.check_expected_status("finished", deployment_id)
 
             # Verify the update was actually installed on the device
-            out = device.run("mender show-artifact").strip()
+            out = device.run("mender -show-artifact").strip()
             assert out == "retry-artifact"
 
             # Verify the number of attempts taken to install the update

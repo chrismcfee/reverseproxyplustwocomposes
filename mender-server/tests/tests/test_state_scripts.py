@@ -1,10 +1,10 @@
-# Copyright 2022 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,49 +16,16 @@ import shutil
 import time
 import os
 import subprocess
-import pathlib
 
 import pytest
 
 from .. import conftest
-from ..common_setup import (
-    class_persistent_standard_setup_one_client_bootstrapped,
-    class_persistent_enterprise_one_client_bootstrapped,
-)
+from ..common_setup import standard_setup_one_client_bootstrapped
 from .common_update import common_update_procedure
 from ..helpers import Helpers
-from ..MenderAPI import DeviceAuthV2, Deployments, logger, image
+from ..MenderAPI import deploy, logger
 from .mendertesting import MenderTesting
 from testutils.infra.device import MenderDeviceGroup
-
-
-@pytest.fixture(scope="class")
-def class_persistent_setup_client_state_scripts_update_module(
-    class_persistent_standard_setup_one_client_bootstrapped,
-):
-    device = class_persistent_standard_setup_one_client_bootstrapped.device
-    device.put(
-        "module-state-scripts-test",
-        local_path=pathlib.Path(__file__).parent.parent.absolute(),
-        remote_path="/usr/share/mender/modules/v3",
-    )
-
-    return class_persistent_standard_setup_one_client_bootstrapped
-
-
-@pytest.fixture(scope="class")
-def class_persistent_enterprise_setup_client_state_scripts_update_module(
-    class_persistent_enterprise_one_client_bootstrapped,
-):
-    device = class_persistent_enterprise_one_client_bootstrapped.device
-    device.put(
-        "module-state-scripts-test",
-        local_path=pathlib.Path(__file__).parent.parent.absolute(),
-        remote_path="/usr/share/mender/modules/v3",
-    )
-
-    return class_persistent_enterprise_one_client_bootstrapped
-
 
 TEST_SETS = [
     (
@@ -264,10 +231,6 @@ TEST_SETS = [
                 "ArtifactRollback_Enter_01",
                 "ArtifactRollback_Leave_00",
                 "ArtifactRollback_Leave_01",
-                "ArtifactRollbackReboot_Enter_00",
-                "ArtifactRollbackReboot_Enter_99",
-                "ArtifactRollbackReboot_Leave_01",
-                "ArtifactRollbackReboot_Leave_99",
                 "ArtifactFailure_Enter_22",
                 "ArtifactFailure_Enter_33",
                 "ArtifactFailure_Leave_44",
@@ -390,8 +353,7 @@ TEST_SETS = [
         {
             "FailureScript": [],
             "ExpectedStatus": "failure",
-            "CorruptEtcScriptVersionIn": "ArtifactReboot_Leave_99",
-            "RestoreEtcScriptVersionIn": "ArtifactRollbackReboot_Leave_99",
+            "CorruptEtcScriptVersionInUpdate": True,
             "ScriptOrder": [
                 "Idle_Enter_08_testing",
                 "Idle_Enter_09",
@@ -439,11 +401,10 @@ REBOOT_TEST_SET = [
     (
         "simulate_powerloss_artifact_install_enter",
         {
-            "RebootScripts": ["ArtifactInstall_Enter_02"],
+            "RebootScripts": ["ArtifactInstall_Enter_01",],
             "ExpectedFinalPartition": ["OriginalPartition"],
             "ScriptOrder": [
                 "ArtifactInstall_Enter_01",
-                "ArtifactInstall_Enter_02",
                 "ArtifactInstall_Leave_01",
                 "ArtifactReboot_Enter_01",
                 "ArtifactReboot_Leave_01",
@@ -451,8 +412,7 @@ REBOOT_TEST_SET = [
                 "ArtifactFailure_Leave_89",
             ],
             "ExpectedScriptFlow": [
-                "ArtifactInstall_Enter_01",  # run one script to init log
-                "ArtifactInstall_Enter_02",  # kill!
+                "ArtifactInstall_Enter_01",  # kill!
                 "ArtifactFailure_Enter_01",  # run failure scripts
                 "ArtifactFailure_Leave_89",
             ],
@@ -462,6 +422,7 @@ REBOOT_TEST_SET = [
         "simulate_powerloss_in_commit_enter",
         {
             "RebootScripts": ["ArtifactCommit_Enter_89"],
+            "DoubleReboot": [True],
             "ExpectedFinalPartition": ["OriginalPartition"],
             "ScriptOrder": [
                 "ArtifactInstall_Enter_01",
@@ -491,6 +452,7 @@ REBOOT_TEST_SET = [
         "simulate_powerloss_in_artifact_commit_leave",
         {
             "RebootOnceScripts": ["ArtifactCommit_Leave_01"],
+            "DoubleReboot": [True],
             "ExpectedFinalPartition": ["OtherPartition"],
             "ScriptOrder": [
                 "ArtifactInstall_Enter_01",
@@ -516,7 +478,7 @@ REBOOT_TEST_SET = [
 ]
 
 
-class BaseTestStateScripts(MenderTesting):
+class TestStateScripts(MenderTesting):
     scripts = [
         "Idle_Enter_08_testing",
         "Idle_Enter_09",
@@ -572,14 +534,12 @@ class BaseTestStateScripts(MenderTesting):
         "ArtifactFailure_Error_55",  # Error for this state doesn't exist, should never run.
     ]
 
-    def do_test_reboot_recovery(
-        self, env, description, test_set,
+    @pytest.mark.parametrize("description,test_set", REBOOT_TEST_SET)
+    def test_reboot_recovery(
+        self, standard_setup_one_client_bootstrapped, description, test_set, valid_image
     ):
 
-        mender_device = env.device
-        devauth = DeviceAuthV2(env.auth)
-        deploy = Deployments(env.auth, devauth)
-
+        mender_device = standard_setup_one_client_bootstrapped.device
         work_dir = "test_state_scripts.%s" % mender_device.host_string
 
         script_content = (
@@ -608,6 +568,14 @@ class BaseTestStateScripts(MenderTesting):
         os.mkdir(work_dir)
         os.mkdir(artifact_script_dir)
 
+        new_rootfs = os.path.join(work_dir, "rootfs.ext4")
+        shutil.copy(valid_image, new_rootfs)
+
+        ps = subprocess.Popen(["debugfs", "-w", new_rootfs], stdin=subprocess.PIPE)
+        ps.stdin.write(b"cd /etc/mender\n" b"mkdir scripts\n" b"cd scripts\n")
+        ps.stdin.close()
+        ps.wait()
+
         for script in test_set.get("ScriptOrder"):
             if not script.startswith("Artifact"):
                 # Not an artifact script, skip this one.
@@ -622,33 +590,32 @@ class BaseTestStateScripts(MenderTesting):
 
         # Now create the artifact, and make the deployment.
         device_id = Helpers.ip_to_device_id_map(
-            MenderDeviceGroup([mender_device.host_string]), devauth=devauth,
+            MenderDeviceGroup([mender_device.host_string])
         )[mender_device.host_string]
 
-        host_ip = env.get_virtual_network_host_ip()
-
-        def make_artifact(filename, artifact_name):
-            return image.make_module_artifact(
-                "module-state-scripts-test",
-                conftest.machine_name,
-                artifact_name,
-                filename,
-                scripts=[artifact_script_dir],
-            )
-
+        host_ip = standard_setup_one_client_bootstrapped.get_virtual_network_host_ip()
         with mender_device.get_reboot_detector(host_ip) as reboot_detector:
 
             common_update_procedure(
+                install_image=new_rootfs,
                 verify_status=True,
                 devices=[device_id],
                 scripts=[artifact_script_dir],
-                make_artifact=make_artifact,
-                devauth=devauth,
-                deploy=deploy,
-            )
+            )[0]
 
             try:
-                reboot_detector.verify_reboot_performed()
+
+                orig_part = mender_device.get_active_partition()
+
+                # handle case where the client has not finished the update
+                # path on the committed partition, but new partition is installed,
+                # thus we will not get a valid entrypoint into the uncommitted parition(reboot_leave)
+                # and the client will thus reboot straight after starting, and u-boot will
+                # fall back to the committed partition
+                if test_set.get("DoubleReboot", False):
+                    reboot_detector.verify_reboot_performed(number_of_reboots=2)
+                else:
+                    reboot_detector.verify_reboot_performed()
 
                 # wait until the last script has been run
                 logger.debug("Wait until the last script has been run")
@@ -675,6 +642,12 @@ class BaseTestStateScripts(MenderTesting):
                         )
                     )
 
+                # make sure the client ended up on the right partition
+                if "OtherPartition" in test_set.get("ExpectedFinalPartition", []):
+                    assert orig_part != mender_device.get_active_partition()
+                else:
+                    assert orig_part == mender_device.get_active_partition()
+
                 assert script_logs.split() == test_set.get("ExpectedScriptFlow")
 
             except:
@@ -697,16 +670,15 @@ class BaseTestStateScripts(MenderTesting):
                     % (client_service_name, client_service_name)
                 )
 
-    def do_test_state_scripts(
-        self, env, description, test_set,
+    @MenderTesting.slow
+    @pytest.mark.parametrize("description,test_set", TEST_SETS)
+    def test_state_scripts(
+        self, standard_setup_one_client_bootstrapped, valid_image, description, test_set
     ):
         """Test that state scripts are executed in right order, and that errors
         are treated like they should."""
 
-        mender_device = env.device
-        devauth = DeviceAuthV2(env.auth)
-        deploy = Deployments(env.auth, devauth)
-
+        mender_device = standard_setup_one_client_bootstrapped.device
         work_dir = "test_state_scripts.%s" % mender_device.host_string
         deployment_id = None
         client_service_name = mender_device.get_client_service_name()
@@ -714,12 +686,31 @@ class BaseTestStateScripts(MenderTesting):
             script_content = '#!/bin/sh\n\necho "`date --rfc-3339=seconds` $(basename $0)" >> /data/test_state_scripts.log\n'
             script_failure_content = script_content + "exit 1\n"
 
+            old_active = mender_device.get_active_partition()
+
             # Make rootfs-scripts and put them in rootfs image.
             rootfs_script_dir = os.path.join(work_dir, "rootfs-scripts")
             shutil.rmtree(work_dir, ignore_errors=True)
             os.mkdir(work_dir)
             os.mkdir(rootfs_script_dir)
 
+            new_rootfs = os.path.join(work_dir, "rootfs.ext4")
+            shutil.copy(valid_image, new_rootfs)
+            ps = subprocess.Popen(["debugfs", "-w", new_rootfs], stdin=subprocess.PIPE)
+            ps.stdin.write(b"cd /etc/mender\n" b"mkdir scripts\n" b"cd scripts\n")
+
+            with open(os.path.join(rootfs_script_dir, "version"), "w") as fd:
+                if test_set.get("CorruptEtcScriptVersionInUpdate"):
+                    fd.write("1000")
+                else:
+                    fd.write("2")
+            ps.stdin.write(b"rm version\n")
+            ps.stdin.write(
+                bytes(
+                    "write %s version\n" % os.path.join(rootfs_script_dir, "version"),
+                    "utf-8",
+                )
+            )
             for script in self.scripts:
                 if script.startswith("Artifact"):
                     # This is a script for the artifact, skip this one.
@@ -730,12 +721,24 @@ class BaseTestStateScripts(MenderTesting):
                     else:
                         fd.write(script_content)
                     os.fchmod(fd.fileno(), 0o0755)
+                ps.stdin.write(
+                    bytes(
+                        "write %s %s\n"
+                        % (os.path.join(rootfs_script_dir, script), script),
+                        "utf-8",
+                    )
+                )
+
+            ps.stdin.close()
+            ps.wait()
 
             # Write this again in case it was corrupted above.
             with open(os.path.join(rootfs_script_dir, "version"), "w") as fd:
                 fd.write("2")
 
-            # Then zip and copy them to QEMU host.
+            # Then copy them to QEMU host.
+            # Zip them all up to avoid having to copy each and every file, which is
+            # quite slow.
             subprocess.check_call(
                 ["tar", "czf", "../rootfs-scripts.tar.gz", "."], cwd=rootfs_script_dir
             )
@@ -768,32 +771,16 @@ class BaseTestStateScripts(MenderTesting):
                         fd.write(script_content)
                     if test_set.get("CorruptDataScriptVersionIn") == script:
                         fd.write("printf '1000' > /data/mender/scripts/version\n")
-                    if test_set.get("CorruptEtcScriptVersionIn") == script:
-                        fd.write("printf '1000' > /etc/mender/scripts/version\n")
-                    if test_set.get("RestoreEtcScriptVersionIn") == script:
-                        fd.write("printf '2' > /etc/mender/scripts/version\n")
-
-            # Callback for our custom artifact maker
-            def make_artifact(filename, artifact_name):
-                return image.make_module_artifact(
-                    "module-state-scripts-test",
-                    conftest.machine_name,
-                    artifact_name,
-                    filename,
-                    scripts=[artifact_script_dir],
-                )
 
             # Now create the artifact, and make the deployment.
             device_id = Helpers.ip_to_device_id_map(
-                MenderDeviceGroup([mender_device.host_string]), devauth=devauth,
+                MenderDeviceGroup([mender_device.host_string])
             )[mender_device.host_string]
             deployment_id = common_update_procedure(
+                install_image=new_rootfs,
                 verify_status=False,
                 devices=[device_id],
                 scripts=[artifact_script_dir],
-                make_artifact=make_artifact,
-                devauth=devauth,
-                deploy=deploy,
             )[0]
             if test_set["ExpectedStatus"] is None:
                 # In this case we don't expect the deployment to even be
@@ -845,6 +832,21 @@ class BaseTestStateScripts(MenderTesting):
 
             output = mender_device.run("cat /data/test_state_scripts.log")
             self.verify_script_log_correct(test_set, output.split("\n"))
+
+            new_active = mender_device.get_active_partition()
+            should_switch_partition = test_set["ExpectedStatus"] == "success"
+
+            if test_set.get("SwapPartitionExpectation"):
+                should_switch_partition = not should_switch_partition
+
+            if should_switch_partition:
+                assert (
+                    old_active != new_active
+                ), "Device did not switch partition as expected!"
+            else:
+                assert (
+                    old_active == new_active
+                ), "Device switched partition which was not expected!"
 
         except:
             output = mender_device.run(
@@ -929,61 +931,3 @@ class BaseTestStateScripts(MenderTesting):
             )
             logger.error("scripts we expected = '%s'" % "\n".join(expected_order))
             raise
-
-
-class TestStateScriptsOpenSource(BaseTestStateScripts):
-    @pytest.mark.parametrize("description,test_set", REBOOT_TEST_SET)
-    def test_reboot_recovery(
-        self,
-        class_persistent_setup_client_state_scripts_update_module,
-        description,
-        test_set,
-    ):
-        self.do_test_reboot_recovery(
-            class_persistent_setup_client_state_scripts_update_module,
-            description,
-            test_set,
-        )
-
-    @MenderTesting.slow
-    @pytest.mark.parametrize("description,test_set", TEST_SETS)
-    def test_state_scripts(
-        self,
-        class_persistent_setup_client_state_scripts_update_module,
-        description,
-        test_set,
-    ):
-        self.do_test_state_scripts(
-            class_persistent_setup_client_state_scripts_update_module,
-            description,
-            test_set,
-        )
-
-
-class TestStateScriptsEnterprise(BaseTestStateScripts):
-    @pytest.mark.parametrize("description,test_set", REBOOT_TEST_SET)
-    def test_reboot_recovery(
-        self,
-        class_persistent_enterprise_setup_client_state_scripts_update_module,
-        description,
-        test_set,
-    ):
-        self.do_test_reboot_recovery(
-            class_persistent_enterprise_setup_client_state_scripts_update_module,
-            description,
-            test_set,
-        )
-
-    @MenderTesting.slow
-    @pytest.mark.parametrize("description,test_set", TEST_SETS)
-    def test_state_scripts(
-        self,
-        class_persistent_enterprise_setup_client_state_scripts_update_module,
-        description,
-        test_set,
-    ):
-        self.do_test_state_scripts(
-            class_persistent_enterprise_setup_client_state_scripts_update_module,
-            description,
-            test_set,
-        )

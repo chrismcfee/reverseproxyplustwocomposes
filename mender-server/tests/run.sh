@@ -1,18 +1,4 @@
 #!/bin/bash
-# Copyright 2022 Northern.tech AS
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
 set -x -e
 
 MACHINE_NAME=qemux86-64
@@ -30,13 +16,11 @@ usage() {
     echo "    --                               Seperates 'run.sh' arguments from pytest arguments"
     echo "    <pytest-args>                    Passes these arguments along to pytest"
     echo "    tests/<testfile.py>              Name the test-file to run"
-    echo "    -k TestNameToRun                 Name of the test class, method, or module to run"
-
     echo
     echo "Recognized Environment Variables:"
     echo
-    echo "TESTS_IN_PARALLEL_INTEGRATION        The number of parallel jobs for pytest-xdist"
-    echo "SPECIFIC_INTEGRATION_TEST            The ability to pass <testname-regexp> to pytest -k"
+    echo "XDIST_PARALLEL_ARG                 The number of parallel jobs for pytest-xdist"
+    echo "SPECIFIC_INTEGRATION_TEST          The ability to pass <testname-regexp> to pytest -k"
     exit 0
 }
 
@@ -65,32 +49,24 @@ while [ -n "$1" ]; do
 done
 
 MENDER_BRANCH=$(../extra/release_tool.py --version-of mender)
+
 if [[ $? -ne 0 ]]; then
     echo "Failed to determine mender version using release_tool.py"
     exit 1
 fi
-
 MENDER_ARTIFACT_BRANCH=$(../extra/release_tool.py --version-of mender-artifact)
+
 if [[ $? -ne 0 ]]; then
     echo "Failed to determine mender-artifact version using release_tool.py"
     exit 1
 fi
 
-MENDER_CLI_BRANCH=$(../extra/release_tool.py --version-of mender-cli)
-if [[ $? -ne 0 ]]; then
-    echo "Failed to determine mender-cli version using release_tool.py"
-    exit 1
-fi
-
 echo "Detected Mender branch: $MENDER_BRANCH"
-echo "Detected mender-artifact branch: $MENDER_ARTIFACT_BRANCH"
-echo "Detected mender-cli branch: $MENDER_CLI_BRANCH"
+echo "Detected Mender artifact branch: $MENDER_ARTIFACT_BRANCH"
 
 function modify_services_for_testing() {
     # Remove all published ports for testing
-    sed -e '/9000:9000/d' -e '/8080:8080/d' -e '/8083:8083/d' -e '/8082:8082/d' -e '/ports:/d' ../docker-compose.demo.yml > ../docker-compose.testing.yml
-    
-    sed -e '/9000:9000/d' -e '/ports:/d' ../storage-proxy/docker-compose.storage-proxy.demo.yml > ../storage-proxy/docker-compose.storage-proxy.testing.yml
+    sed -e '/9000:9000/d' -e '/8080:8080/d' -e '/443:443/d' -e '/ports:/d' ../docker-compose.demo.yml > ../docker-compose.testing.yml
     # disable download speed limits
     sed -e 's/DOWNLOAD_SPEED/#DOWNLOAD_SPEED/' -i ../docker-compose.testing.yml
     # whitelist *all* IPs/DNS names in the gateway (will be accessed via dynamically assigned IP in tests)
@@ -108,7 +84,7 @@ function get_requirements() {
     # Download what we need.
     mkdir -p downloaded-tools
 
-    curl --fail "https://downloads.mender.io/mender-artifact/${MENDER_ARTIFACT_BRANCH}/linux/mender-artifact" \
+    curl --fail "https://d1b0l86ne08fsf.cloudfront.net/mender-artifact/${MENDER_ARTIFACT_BRANCH}/linux/mender-artifact" \
          -o downloaded-tools/mender-artifact \
          -z downloaded-tools/mender-artifact
 
@@ -119,16 +95,10 @@ function get_requirements() {
 
     chmod +x downloaded-tools/mender-artifact
 
-    curl --fail "https://downloads.mender.io/mender-cli/${MENDER_CLI_BRANCH}/linux/mender-cli" \
-         -o downloaded-tools/mender-cli \
-         -z downloaded-tools/mender-cli
-
     if [ $? -ne 0 ]; then
-        echo "failed to download mender-cli"
+        echo "failed to download ext4 image"
         exit 1
     fi
-
-    chmod +x downloaded-tools/mender-cli
 
     curl --fail "https://raw.githubusercontent.com/mendersoftware/mender/${MENDER_BRANCH}/support/modules-artifact-gen/directory-artifact-gen" \
          -o downloaded-tools/directory-artifact-gen \
@@ -141,20 +111,26 @@ function get_requirements() {
 
     chmod +x downloaded-tools/directory-artifact-gen
 
-    curl --fail "https://raw.githubusercontent.com/mendersoftware/mender/${MENDER_BRANCH}/support/modules-artifact-gen/single-file-artifact-gen" \
-         -o downloaded-tools/single-file-artifact-gen \
-         -z downloaded-tools/single-file-artifact-gen
-
     if [ $? -ne 0 ]; then
-        echo "failed to download single-file-artifact-gen"
+        echo "failed to download directory-artifact-gen"
         exit 1
     fi
-
-    chmod +x downloaded-tools/single-file-artifact-gen
 
     export PATH=$PWD/downloaded-tools:$PATH
 
     inject_pre_generated_ssh_keys
+}
+
+# Old ways of getting the image, now deprecated, but still needed for images
+# built with thud or older.
+get_ext4_image_deprecated() {
+    if [[ -n "$BUILDDIR" ]]; then
+        cp -f "$BUILDDIR/tmp/deploy/images/$MACHINE_NAME/core-image-full-cmdline-$MACHINE_NAME.ext4" .
+    elif [[ -n "$DOWNLOAD_REQUIREMENTS" ]]; then
+        curl --fail "https://mender.s3-accelerate.amazonaws.com/temp_${MENDER_BRANCH}/core-image-full-cmdline-$MACHINE_NAME.ext4" \
+             -o core-image-full-cmdline-$MACHINE_NAME.ext4 \
+             -z core-image-full-cmdline-$MACHINE_NAME.ext4
+    fi
 }
 
 if [[ $1 == "--get-requirements" ]]; then
@@ -168,17 +144,19 @@ if [[ -z "$BUILDDIR" ]] && [[ -n "$DOWNLOAD_REQUIREMENTS" ]]; then
     get_requirements
 fi
 
-# Extract file system images from Docker images
 mkdir -p output
+ret=0
 docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-       mendersoftware/mender-client-qemu:$(../extra/release_tool.py --version-of mender-client-qemu --version-type docker)
-docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-        mendersoftware/mender-client-qemu-rofs:$(../extra/release_tool.py --version-of mender-client-qemu-rofs --version-type docker)
-docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-        registry.mender.io/mendersoftware/mender-gateway-qemu-commercial:$(../extra/release_tool.py --version-of mender-gateway --version-type docker)
-docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-         registry.mender.io/mendersoftware/mender-qemu-rofs-commercial:$(../extra/release_tool.py --version-of mender-qemu-rofs-commercial --version-type docker)
-mv output/* .
+       mendersoftware/mender-client-qemu:$(../extra/release_tool.py --version-of mender-client-qemu --version-type docker) || ret=$?
+if [ $ret -eq 0 ]; then
+    # There is `extract_fs` support. Get the R/O image too.
+    docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
+           mendersoftware/mender-client-qemu-rofs:$(../extra/release_tool.py --version-of mender-client-qemu-rofs --version-type docker)
+    mv output/* .
+else
+    # Old style ext4 fetching.
+    get_ext4_image_deprecated
+fi
 rmdir output
 
 modify_services_for_testing
@@ -197,7 +175,7 @@ if ! python3 -m pip show pytest-xdist >/dev/null; then
     echo "WARNING: install pytest-xdist for running tests in parallel"
 else
     # run all tests when running in parallel
-    EXTRA_TEST_ARGS="${XDIST_ARGS:--n ${TESTS_IN_PARALLEL_INTEGRATION:-auto}}"
+    EXTRA_TEST_ARGS="${XDIST_ARGS:--n ${TESTS_IN_PARALLEL:-auto}}"
 fi
 
 if ! python3 -m pip show pytest-html >/dev/null; then
@@ -209,15 +187,10 @@ if [[ -n $SPECIFIC_INTEGRATION_TEST ]]; then
     SPECIFIC_INTEGRATION_TEST_FLAG="-k"
 fi
 
-if [ -n "$K8S" ]; then
-    export KUBECONFIG="${HOME}/kubeconfig.${K8S}"
-    aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $AWS_EKS_CLUSTER_NAME --kubeconfig ${HOME}/kubeconfig.${K8S}
-fi
-
 python3 -m pytest \
     $EXTRA_TEST_ARGS \
     --verbose \
     --junitxml=results.xml \
     $HTML_REPORT \
     "$@" \
-    $SPECIFIC_INTEGRATION_TEST_FLAG ${SPECIFIC_INTEGRATION_TEST:+"$SPECIFIC_INTEGRATION_TEST"}
+    $SPECIFIC_INTEGRATION_TEST_FLAG "$SPECIFIC_INTEGRATION_TEST"

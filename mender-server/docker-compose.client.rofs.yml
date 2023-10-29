@@ -1,8 +1,8 @@
-version: '2.3'
+version: '2.1'
 services:
 
     #
     # mender-client
     #
     mender-client:
-        image: mendersoftware/mender-client-qemu-rofs:mender-3.6.2
+        image: mendersoftware/mender-client-qemu-rofs:2.3.0b1

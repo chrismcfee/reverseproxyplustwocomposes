@@ -1,10 +1,10 @@
-# Copyright 2021 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,9 +13,9 @@
 #    limitations under the License.
 
 import os
+import requests
 import tempfile
 import time
-import uuid
 
 from json import dumps
 
@@ -91,7 +91,7 @@ class TestCreateArtifactBase:
         assert artifact["description"] == "description"
         assert artifact["name"] == "artifact"
         assert artifact["info"] == {"format": "mender", "version": 3}
-        assert artifact["signed"] is False
+        assert artifact["signed"] == False
         assert len(artifact["updates"]) == 1
         assert artifact["size"] > 0
         assert artifact["id"] is not None
@@ -100,10 +100,9 @@ class TestCreateArtifactBase:
 
 class TestCreateArtifactEnterprise(TestCreateArtifactBase):
     def test_create_artifact(self, mongo, clean_mongo):
-        uuidv4 = str(uuid.uuid4())
         tenant, username, password = (
-            "test.mender.io-" + uuidv4,
-            "some.user+" + uuidv4 + "@example.com",
+            "test.mender.io",
+            "some.user@example.com",
             "secretsecret",
         )
         create_org(tenant, username, password)
@@ -112,7 +111,6 @@ class TestCreateArtifactEnterprise(TestCreateArtifactBase):
 
 class TestCreateArtifactOpenSource(TestCreateArtifactBase):
     def test_create_artifact(self, mongo, clean_mongo):
-        uuidv4 = str(uuid.uuid4())
-        username, password = ("some.user+" + uuidv4 + "@example.com", "secretsecret")
+        username, password = "some.user@example.com", "secretsecret"
         create_user(username, password)
         self.run_create_artifact_test(username, password)

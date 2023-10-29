@@ -1,10 +1,10 @@
-# Copyright 2022 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,11 +16,8 @@ import time
 import logging
 import traceback
 import os
-import redo
 import socket
 import subprocess
-import time
-from typing import Dict
 
 from fabric import Connection
 from paramiko import SSHException
@@ -60,13 +57,7 @@ class MenderDevice:
             user=self.user,
             port=self.port,
             connect_timeout=60,
-            connect_kwargs={
-                "password": "",
-                "banner_timeout": 60,
-                "auth_timeout": 60,
-                "look_for_keys": False,
-                "allow_agent": False,
-            },
+            connect_kwargs={"password": "", "banner_timeout": 60, "auth_timeout": 60},
         )
         self._conn.client.set_missing_host_key_policy(IgnorePolicy())
         self._service_name = None
@@ -75,11 +66,11 @@ class MenderDevice:
     def host_string(self):
         return "%s:%s" % (self.host, self.port)
 
-    def run(self, cmd, **kw) -> str:
+    def run(self, cmd, **kw):
         """Run given cmd in remote SSH host
 
         Argument:
-        cmd - string with the command to execute remotely
+        cmd - sring with the command to execute remotely
 
         Recognized keyword arguments:
         hide - do not print stdout nor stderr, and do not fail on errors
@@ -112,29 +103,15 @@ class MenderDevice:
         Keyword arguments:
         wait - Timeout (in seconds)
         """
-        waited = -1
-        t0 = int(time.time())
-        raise_exception = None
-        for _ in redo.retrier(max_sleeptime=wait, attempts=wait, sleeptime=1):
-            try:
-                self.run("true", hide=True, wait=wait)
-                raise_exception = None
-                break
-            except Exception as e:
-                raise_exception = e
-            finally:
-                waited = int(time.time()) - t0
-        if raise_exception:
-            logger.error("Can't open ssh after %d s of waiting and trying" % waited)
-            raise (raise_exception)
+        self.run("true", hide=True, wait=wait)
 
     def yocto_id_installed_on_machine(self):
-        cmd = "mender show-artifact"
+        cmd = "mender -show-artifact"
         output = self.run(cmd, hide=True).strip()
         return output
 
     def get_active_partition(self):
-        cmd = r"mount | awk '/on \/ / { print $1}'"
+        cmd = "mount | awk '/on \/ / { print $1}'"
         active = self.run(cmd, hide=True)
         return active.strip()
 
@@ -159,30 +136,32 @@ class MenderDevice:
 
 
 class RebootDetector:
+    # This global one is used to increment each port used.
+    port = 8181
+
     def __init__(self, device, host_ip):
+        self.port = RebootDetector.port
+        RebootDetector.port += 1
         self.host_ip = host_ip
         self.device = device
         self.server = None
 
     def __enter__(self):
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind((self.host_ip, 0))
-        addr, port = self.server.getsockname()
-        self.port = port
-
         local_name = "test.mender-reboot-detector.txt.%s" % self.device.host_string
         with open(local_name, "w") as fd:
             fd.write("%s:%d" % (self.host_ip, self.port))
         try:
             self.device.put(
-                local_name, remote_path="/data/mender/test.mender-reboot-detector.txt"
+                local_name, remote_path="/data/mender/test.mender-reboot-detector.txt",
             )
         finally:
             os.unlink(local_name)
 
         self.device.run("systemctl restart mender-reboot-detector")
 
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server.bind((self.host_ip, self.port))
         self.server.listen(1)
 
         return self
@@ -282,12 +261,7 @@ class MenderDeviceGroup:
     def __getitem__(self, idx):
         return self._devices[idx]
 
-    def append(self, new_device: MenderDevice):
-        """Append new_device to the group."""
-        assert isinstance(new_device, MenderDevice)
-        self._devices.append(new_device)
-
-    def run(self, cmd, **kw) -> Dict:
+    def run(self, cmd, **kw):
         """Run command for all devices in group sequentially
 
         see MenderDevice.run
@@ -344,21 +318,12 @@ def _ssh_prep_args_impl(device, tool):
 
 def _put(device, file, local_path=".", remote_path="."):
     (scp, host, port) = _scp_prep_args(device)
-    for i in range(3):
-        try:
-            subprocess.check_output(
-                f"{scp} -O {port} {local_path}/{file} {device.user}@{host}:{remote_path}",
-                shell=True,
-            )
-        except subprocess.CalledProcessError as e:
-            # we tried three times, give up
-            if i == 2:
-                logger.info("CalledProcessError.output = %r", e.output)
-                raise
-            # wait two seconds before trying again
-            time.sleep(2)
-        else:
-            break
+
+    subprocess.check_call(
+        "%s %s %s/%s %s@%s:%s"
+        % (scp, port, local_path, file, device.user, host, remote_path),
+        shell=True,
+    )
 
 
 # Roughly the execution time of the slowest test (*) times 3
@@ -406,7 +371,7 @@ def _run(conn, cmd, **kw):
                 conn.host,
                 str(e),
             )
-            if "Cannot assign requested address" not in str(e):
+            if not "Cannot assign requested address" in str(e):
                 raise e
             continue
         except UnexpectedExit as e:
@@ -420,7 +385,7 @@ def _run(conn, cmd, **kw):
             continue
         except Exception as e:
             logger.exception(
-                "Generic exception happened while connecting to host %s", conn.host
+                "Generic exception happened while connecting to host %s", conn.host,
             )
             raise e
     else:

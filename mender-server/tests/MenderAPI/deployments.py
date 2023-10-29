@@ -1,10 +1,10 @@
-# Copyright 2022 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,10 +28,10 @@ class Deployments:
     # track the last statistic for a deployment id
     last_statistic = {}
 
-    def __init__(self, auth, devauth):
+    def __init__(self, auth, auth_v2):
         self.reset()
         self.auth = auth
-        self.devauth = devauth
+        self.auth_v2 = auth_v2
 
     def reset(self):
         # Reset all temporary values.
@@ -69,15 +69,7 @@ class Deployments:
         assert r.status_code == requests.status_codes.codes.created
         return r.headers["location"]
 
-    def trigger_deployment(
-        self,
-        name,
-        artifact_name,
-        devices,
-        retries=0,
-        update_control_map=None,
-        autogenerate_delta=False,
-    ):
+    def trigger_deployment(self, name, artifact_name, devices, retries=0):
         deployments_path_url = self.get_deployments_base_path() + "deployments"
 
         trigger_data = {
@@ -85,10 +77,7 @@ class Deployments:
             "artifact_name": artifact_name,
             "devices": devices,
             "retries": retries,
-            "autogenerate_delta": autogenerate_delta,
         }
-        if update_control_map:
-            trigger_data["update_control_map"] = update_control_map
 
         headers = {"Content-Type": "application/json"}
         headers.update(self.auth.get_auth_token())
@@ -178,34 +167,11 @@ class Deployments:
                 time.sleep(polling_frequency)
                 continue
 
-        pytest.fail(
-            "Never found status: %s for %s after %d seconds"
-            % (expected_status, deployment_id, max_wait)
-        )
-
-    def check_not_in_status(
-        self, expected_status, deployment_id, max_wait=60 * 60, polling_frequency=0.2
-    ):
-        timeout = time.time() + max_wait
-
-        while time.time() <= timeout:
-            data = self.get_status(status=expected_status)
-
-            for deployment in data:
-                if deployment["id"] == deployment_id:
-                    time.sleep(polling_frequency)
-                    continue
-            else:
-                logger.info(
-                    "left deployment status (%s) as expected for: %s"
-                    % (expected_status, deployment_id)
-                )
-                return
-
-        pytest.fail(
-            "Never left status: %s for %s after %d seconds"
-            % (expected_status, deployment_id, max_wait)
-        )
+        if time.time() > timeout:
+            pytest.fail(
+                "Never found status: %s for %s after %d seconds"
+                % (expected_status, deployment_id, max_wait)
+            )
 
     def check_expected_statistics(
         self,
@@ -226,7 +192,7 @@ class Deployments:
 
             if int(data["failure"]) > 0 and expected_status != "failure":
                 all_failed_logs = ""
-                for device in self.devauth.get_devices():
+                for device in self.auth_v2.get_devices():
                     try:
                         all_failed_logs += (
                             self.get_logs(device["id"], deployment_id) + "\n" * 5
@@ -319,15 +285,3 @@ class Deployments:
         )
         time.sleep(5)
         assert r.status_code == requests.status_codes.codes.unprocessable_entity
-
-    def patch_deployment(self, deployment_id, update_control_map):
-        deployments_url = self.get_deployments_base_path() + "deployments/%s" % (
-            deployment_id
-        )
-        r = requests_retry().patch(
-            deployments_url,
-            headers=self.auth.get_auth_token(),
-            verify=False,
-            json={"update_control_map": update_control_map},
-        )
-        assert r.status_code == requests.status_codes.codes.no_content

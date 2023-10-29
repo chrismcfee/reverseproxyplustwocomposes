@@ -1,4 +1,4 @@
-version: '2.3'
+version: '2.1'
 services:
 
     #
@@ -8,5 +8,4 @@ services:
         networks:
             - mender
         environment:
-            - SERVER_URL=$SERVER_URL
             - TENANT_TOKEN=$TENANT_TOKEN

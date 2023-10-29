@@ -17,6 +17,10 @@ http {
         ngx.log(ngx.WARN, "max connections: " .. (os.getenv("MAX_CONNECTIONS") or "not set"))
     }
 
+    upstream minio_backend {
+        server minio:9000 max_fails=0;
+    }
+
     lua_shared_dict my_limit_conn_store 100m;
 
     server {
@@ -102,7 +106,7 @@ http {
             proxy_http_version 1.1;
 
             proxy_set_header Host $http_host;
-            proxy_pass https://mender-api-gateway/;
+            proxy_pass http://minio_backend;
         }
     }
 }

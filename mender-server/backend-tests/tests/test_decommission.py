@@ -1,10 +1,10 @@
-# Copyright 2021 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,23 +15,21 @@
 import time
 import logging
 import pytest
-import uuid
 
+from testutils.common import mongo, clean_mongo
 from testutils.api.client import ApiClient
 import testutils.api.useradm as useradm
 import testutils.api.deviceauth as deviceauth
+import testutils.api.deviceauth_v2 as deviceauth_v2
 import testutils.api.deployments as deployments
 import testutils.api.inventory as inventory
 from testutils.infra.cli import CliTenantadm, CliUseradm, CliDeviceauth
 from testutils.common import (
     Device,
-    mongo,
-    clean_mongo,
     create_org,
     create_random_authset,
     change_authset_status,
     create_user,
-    useExistingTenant,
 )
 
 logging.basicConfig(format="%(asctime)s %(message)s")
@@ -39,7 +37,7 @@ logger = logging.getLogger("test_decomission")
 logger.setLevel(logging.INFO)
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def clean_migrated_mongo(clean_mongo):
     deviceauth_cli = CliDeviceauth()
     useradm_cli = CliUseradm()
@@ -50,7 +48,7 @@ def clean_migrated_mongo(clean_mongo):
     yield clean_mongo
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def clean_migrated_mongo_mt(clean_mongo):
     deviceauth_cli = CliDeviceauth()
     useradm_cli = CliUseradm()
@@ -63,15 +61,15 @@ def clean_migrated_mongo_mt(clean_mongo):
     yield clean_mongo
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def user(clean_migrated_mongo):
     yield create_user("user-foo@acme.com", "correcthorse")
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def devices(clean_migrated_mongo, user):
     useradmm = ApiClient(useradm.URL_MGMT)
-    devauthm = ApiClient(deviceauth.URL_MGMT)
+    devauthm = ApiClient(deviceauth_v2.URL_MGMT)
     devauthd = ApiClient(deviceauth.URL_DEVICES)
 
     r = useradmm.call("POST", useradm.URL_LOGIN, auth=(user.name, user.pwd))
@@ -89,18 +87,14 @@ def devices(clean_migrated_mongo, user):
     yield devices
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def tenants(clean_migrated_mongo_mt):
     tenants = []
 
-    for n in range(2):
-        uuidv4 = str(uuid.uuid4())
-        tenant, username, password = (
-            "test.mender.io-" + uuidv4,
-            "some.user+" + uuidv4 + "@example.com",
-            "secretsecret",
-        )
-        tenants.append(create_org(tenant, username, password))
+    for n in ["tenant1", "tenant2"]:
+        username = "user@" + n + ".com"
+        password = "correcthorse"
+        tenants.append(create_org(n, username, password))
 
     yield tenants
 
@@ -108,7 +102,7 @@ def tenants(clean_migrated_mongo_mt):
 @pytest.fixture(scope="function")
 def tenants_users_devices(tenants, clean_migrated_mongo_mt):
     useradmm = ApiClient(useradm.URL_MGMT)
-    devauthm = ApiClient(deviceauth.URL_MGMT)
+    devauthm = ApiClient(deviceauth_v2.URL_MGMT)
     devauthd = ApiClient(deviceauth.URL_DEVICES)
     for t in tenants:
         user = t.users[0]
@@ -128,7 +122,7 @@ def tenants_users_devices(tenants, clean_migrated_mongo_mt):
 class TestDeviceDecomissioningBase:
     def do_test_ok(self, user, device, tenant_token=None):
         devauthd = ApiClient(deviceauth.URL_DEVICES)
-        devauthm = ApiClient(deviceauth.URL_MGMT)
+        devauthm = ApiClient(deviceauth_v2.URL_MGMT)
         useradmm = ApiClient(useradm.URL_MGMT)
         deploymentsd = ApiClient(deployments.URL_DEVICES)
         inventoryd = ApiClient(inventory.URL_DEV)
@@ -173,7 +167,7 @@ class TestDeviceDecomissioningBase:
 
         # decommission
         r = devauthm.with_auth(utoken).call(
-            "DELETE", deviceauth.URL_DEVICE.format(id=aset.did)
+            "DELETE", deviceauth_v2.URL_DEVICE.format(id=aset.did)
         )
 
         # check device is rejected
@@ -203,7 +197,7 @@ class TestDeviceDecomissioningBase:
         timeout = time.time() + 60
         while time.time() < timeout:
             r = devauthm.with_auth(utoken).call(
-                "GET", deviceauth.URL_DEVICE.format(id=aset.did)
+                "GET", deviceauth_v2.URL_DEVICE.format(id=aset.did)
             )
             if r.status_code == 404:
                 break
@@ -219,9 +213,6 @@ class TestDeviceDecomissioning(TestDeviceDecomissioningBase):
         self.do_test_ok(user, devices[0])
 
 
-@pytest.mark.skipif(
-    useExistingTenant(), reason="not feasible to test with existing tenant",
-)
 class TestDeviceDecomissioningEnterprise(TestDeviceDecomissioningBase):
     def test_ok(self, tenants_users_devices):
         t = tenants_users_devices[0]
@@ -229,12 +220,11 @@ class TestDeviceDecomissioningEnterprise(TestDeviceDecomissioningBase):
             user=t.users[0], device=t.devices[0], tenant_token=t.tenant_token
         )
 
-        if not useExistingTenant():
-            t1 = tenants_users_devices[1]
-            self.verify_devices_unmodified(t1.users[0], t1.devices)
+        t1 = tenants_users_devices[1]
+        self.verify_devices_unmodified(t1.users[0], t1.devices)
 
     def verify_devices_unmodified(self, user, in_devices):
-        devauthm = ApiClient(deviceauth.URL_MGMT)
+        devauthm = ApiClient(deviceauth_v2.URL_MGMT)
         useradmm = ApiClient(useradm.URL_MGMT)
 
         r = useradmm.call("POST", useradm.URL_LOGIN, auth=(user.name, user.pwd))
@@ -242,7 +232,7 @@ class TestDeviceDecomissioningEnterprise(TestDeviceDecomissioningBase):
 
         utoken = r.text
 
-        r = devauthm.with_auth(utoken).call("GET", deviceauth.URL_MGMT_DEVICES)
+        r = devauthm.with_auth(utoken).call("GET", deviceauth_v2.URL_DEVICES)
         assert r.status_code == 200
         api_devs = r.json()
 

@@ -15,10 +15,6 @@ git init
 echo dummy > dummy
 git add dummy
 git commit -m 'Dummy commit'
-git branch prev_branch
-# This is due to upstream rename from master to main: Find out which is the
-# default in this installation.
-main=$(git symbolic-ref --short HEAD)
 
 # The numbers that are sprinkled about below are just to make it easier to
 # pinpoint where a particular line came from.
@@ -211,7 +207,7 @@ git commit --allow-empty -m 'Jira MEN-1111: Changelog with Jira. N55
 
 jira archive-2
 men-9
-https://northerntech.atlassian.net/browse/men-1
+https://tracker.mender.io/browse/men-1
 
 Changelog: commit'
 
@@ -221,7 +217,7 @@ git commit --allow-empty -m 'Jira MEN-1111: Changelog with Jira tracker. N56
 
 jira archive-2
 men-9
-https://northerntech.atlassian.net/browse/men-1
+https://tracker.mender.io/browse/men-1
 
 Changelog: commit'
 
@@ -231,8 +227,8 @@ git commit --allow-empty -m 'Jira MEN-1111: Changelog with many Jira refs. N57
 
 Ref: jira: archive-2
 Ref: men-9
-Ref: https://northerntech.atlassian.net/browse/men-1
-Ticket: MEN-12345
+Ref: https://tracker.mender.io/browse/men-1
+Ref: MEN-12345
 
 Changelog: commit'
 
@@ -253,18 +249,6 @@ git commit --allow-empty -m 'Changelog with suspicious number in it. N62
 1234
 
 Changelog: commit'
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Bump github.com/stretchr/testify from 1.5.1 to 1.6.0
-
-Bumps [github.com/stretchr/testify](https://github.com/stretchr/testify) from 1.5.1 to 1.6.0.
-- [Release notes](https://github.com/stretchr/testify/releases)
-- [Commits](stretchr/testify@v1.5.1...v1.6.0)
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot-preview[bot] <support@dependabot.com>'
 
 ################################################################################
 
@@ -295,21 +279,20 @@ Changelog: commit'
 # A bit tricky to make this commit, because normal git-commit cleans up \r.
 # But it *is* in our Git history (1f900885d2aebda3e23ca5129d37f5e75eb83ee4)
 TREE=$(git cat-file commit HEAD | grep '^tree ' | sed -e 's/^tree //')
-git reset --hard $(git commit-tree -p $(git rev-parse HEAD) $TREE <<EOF
+git reset --hard $(git commit-tree -p $(git rev-parse HEAD) $TREE <<EOF)
 Changelog with Windows line endings N66
 
 Changelog: title
 
 stuff stuff
 EOF
-)
 
 ################################################################################
 
 # We just generate an invalid GPG signature (it is from a random commit in core
 # and won't be valid, but that doesn't matter).
 TREE=$(git cat-file commit HEAD | grep '^tree ' | sed -e 's/^tree //')
-git reset --hard $(git hash-object -w -t commit --stdin <<EOF
+git reset --hard $(git hash-object -w -t commit --stdin <<EOF)
 tree $TREE
 parent $(git rev-parse HEAD)
 author whatever <whatever@whatever.com> 1461929235 -0400
@@ -336,7 +319,6 @@ Changelog with GPG entry N67
 
 Changelog: Commit
 EOF
-)
 
 ################################################################################
 
@@ -382,183 +364,7 @@ Acked-by: Test3 <test3@test.com>'
 
 ################################################################################
 
-git commit --allow-empty -m 'Changelog:All : Complete commit with inline entry N73
-
-Should be included N74'
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Bump github.com/klauspost/pgzip from 1.2.3 to 1.2.4
-
-Bumps [github.com/klauspost/pgzip](https://github.com/klauspost/pgzip) from 1.2.3 to 1.2.4.
-- [Release notes](https://github.com/klauspost/pgzip/releases)
-- [Commits](klauspost/pgzip@v1.2.3...v1.2.4)
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot[bot] <support@github.com>'
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Bump pytest-html in /tests/requirements
-
-Bumps [pytest-html](https://github.com/pytest-dev/pytest-html) from 2.0.1 to 2.1.1.
-- [Release notes](https://github.com/pytest-dev/pytest-html/releases)
-- [Changelog](https://github.com/pytest-dev/pytest-html/blob/master/CHANGES.rst)
-- [Commits](https://github.com/pytest-dev/pytest-html/compare/v2.0.1...v2.1.1)
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot[bot] <support@github.com>'
-
-################################################################################
-
-git commit --allow-empty -m 'Changelog: All bugs fixed N75
-
-Should not be included N76'
-
-################################################################################
-
-git commit --allow-empty -m 'Changelog: AllSomethingElse N77
-
-Should not be included N78'
-
-################################################################################
-
-git commit --allow-empty -m 'fix:Fix type N79
-
-Should not be included N80
-
-Changelog: Title'
-git commit --allow-empty -m 'fix(foo): Fix type with scope N81
-
-Should be included N82
-
-Changelog: All'
-git commit --allow-empty -m 'fix(foo): Fix type with scope, not included N83
-
-Should not be included N84
-
-Changelog: None'
-git commit --allow-empty -m 'fIx(foo): Fix type with scope and uppercase letters N85
-
-Should not be included N86
-
-Changelog: Title'
-
-################################################################################
-
-git commit --allow-empty -m 'feat: Feat type N87
-
-Should be included N88
-
-Changelog: All'
-git commit --allow-empty -m 'feat: Feat type, not included N89
-
-Should not be included N90
-
-Changelog: Should be a feat changelog N91'
-git commit --allow-empty -m 'feat(foo): Feat type with scope, not included N92
-
-Should not be included N93'
-git commit --allow-empty -m 'feat(foo): Feat type with scope and refs N94
-
-Should be included N95
-
-Changelog: All
-Ticket: men-0603
-Signed-off-by: Ole Nordmann <ole.nordmann@norway.no>'
-git commit --allow-empty -m 'FeAt: Feat type and uppercase letters N96
-
-Changelog: All'
-
-################################################################################
-
-git commit --allow-empty -m 'feat(foo): Fix type with scope, some letters uppercase N97
-
-Should not be included N98
-
-Changelog: title
-Changelog(fix): Custom changelog with keyword, should be fix N99
-Changelog(feat): Custom changelog with keyword and ref, should be feat MEN-1234 N100
-Changelog(fEaT): Custom changelog with keyword with uppercase letters and ref, should be feat N101'
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Bump golang from 1.14 to 1.15.0
-
-Bumps golang from 1.14 to 1.15.0.
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot[bot] <support@github.com>'
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Bump mender-test-images from 457ea99 to 713c563
-
-Bumps [tests/acceptance/image-tests](https://github.com/mendersoftware/mender-image-tests) from `457ea99` to `713c563`.
-- [Release notes](https://github.com/mendersoftware/mender-image-tests/releases)
-- [Commits](https://github.com/mendersoftware/mender-image-
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot[bot] <support@github.com>'
-
-################################################################################
-
-git commit --allow-empty -m 'feat: Bump paramiko from 2.9.1 to 2.9.2 in /tests/requirements
-
-Bumps [paramiko](https://github.com/paramiko/paramiko) from 2.9.1 to 2.9.2.
-- [Release notes](https://github.com/paramiko/paramiko/releases)
-- [Changelog](https://github.com/paramiko/paramiko/blob/main/NEWS)
-- [Commits](https://github.com/paramiko/paramiko/compare/2.9.1...2.9.2)
-
----
-updated-dependencies:
-- dependency-name: paramiko
-  dependency-type: direct:production
-  update-type: version-update:semver-patch
-...
-
-Changelog: All
-Ticket: None
-Signed-off-by: dependabot[bot] <support@github.com>'
-
-################################################################################
-
-git commit --allow-empty -m 'fix:cherry-picked fix N102
-
-Should not appear, since it appears in prev_branch too.
-
-Changelog: Title
-Ticket:None'
-git checkout prev_branch
-git cherry-pick -x --allow-empty $main
-git checkout $main
-
-################################################################################
-
-git commit --allow-empty -m 'fix: Ending with a code example N103
-
-```
-code example
-```
-
-Changelog: Commit
-Ticket:MEN-1234'
-
-################################################################################
-
-
-git commit --allow-empty -m 'fix: Something enterprise N104
-
-Changelog: Title
-Ticket: ME-1234'
-
-################################################################################
-
-"$SRC_DIR/changelog-generator" --repo --sort-changelog prev_branch..$main > result.txt 2>stderr.txt || {
+"$SRC_DIR/changelog-generator" --repo --sort-changelog HEAD > result.txt 2>stderr.txt || {
     echo "Script failed with $?"
     echo "--------"
     echo "result.txt:"
@@ -569,163 +375,77 @@ Ticket: ME-1234'
     exit 1
 }
 cat > expected.txt <<EOF
-### Changelogs
+## test-changelog-generator.$$ HEAD
 
-#### test-changelog-generator.$$ ($main)
+_Released xx.xx.xxxx_
 
-New changes in test-changelog-generator.$$ since prev_branch:
+#### test-changelog-generator.$$ (HEAD)
 
-##### Bug Fixes
-
-* Fix type with scope and uppercase letters N85
-* Fix type with scope N81
-
-  Should be included N82
-* Custom changelog with keyword, should be fix N99
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
-* Ending with a code example N103
-
-  \`\`\`
-  code example
-  \`\`\`
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
-* Something enterprise N104
-  ([ME-1234](https://northerntech.atlassian.net/browse/ME-1234))
-* Fix type N79
-* Aggregated Dependabot Changelogs:
-  * Bumps [github.com/klauspost/pgzip](https://github.com/klauspost/pgzip) from 1.2.3 to 1.2.4.
-      - [Release notes](https://github.com/klauspost/pgzip/releases)
-      - [Commits](klauspost/pgzip@v1.2.3...v1.2.4)
-  * Bumps [github.com/stretchr/testify](https://github.com/stretchr/testify) from 1.5.1 to 1.6.0.
-      - [Release notes](https://github.com/stretchr/testify/releases)
-      - [Commits](stretchr/testify@v1.5.1...v1.6.0)
-  * Bumps golang from 1.14 to 1.15.0.
-  * Bumps [pytest-html](https://github.com/pytest-dev/pytest-html) from 2.0.1 to 2.1.1.
-      - [Release notes](https://github.com/pytest-dev/pytest-html/releases)
-      - [Changelog](https://github.com/pytest-dev/pytest-html/blob/master/CHANGES.rst)
-      - [Commits](https://github.com/pytest-dev/pytest-html/compare/v2.0.1...v2.1.1)
-
-##### Features
-
-* Feat type and uppercase letters N96
-* Feat type with scope and refs N94
-
-  Should be included N95
-  ([MEN-0603](https://northerntech.atlassian.net/browse/MEN-0603))
-* Fix type with scope, some letters uppercase N97
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
-* Custom changelog with keyword and ref, should be feat N100
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
-* Custom changelog with keyword with uppercase letters and ref, should be feat N101
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
-* Feat type N87
-
-  Should be included N88
-* Should be a feat changelog N91
-* Aggregated Dependabot Changelogs:
-  * Bumps [paramiko](https://github.com/paramiko/paramiko) from 2.9.1 to 2.9.2.
-      - [Release notes](https://github.com/paramiko/paramiko/releases)
-      - [Changelog](https://github.com/paramiko/paramiko/blob/main/NEWS)
-      - [Commits](https://github.com/paramiko/paramiko/compare/2.9.1...2.9.2)
-
-      \`\`\`
-      updated-dependencies:
-      - dependency-name: paramiko
-        dependency-type: direct:production
-        update-type: version-update:semver-patch
-      \`\`\`
-
-##### Other
-
-* All bugs fixed N75
-* AllSomethingElse N77
 * As well as this. N34
 * Changelog commit with trailing dot. N53
 * Changelog title with trailing dot. N54
 * Changelog with GPG entry N67
 * Changelog with Jira tracker. N56
-  ([ARCHIVE-2](https://northerntech.atlassian.net/browse/ARCHIVE-2), [MEN-1111](https://northerntech.atlassian.net/browse/MEN-1111), [MEN-1](https://northerntech.atlassian.net/browse/MEN-1), [MEN-9](https://northerntech.atlassian.net/browse/MEN-9))
+  ([ARCHIVE-2](https://tracker.mender.io/browse/ARCHIVE-2), [MEN-1111](https://tracker.mender.io/browse/MEN-1111), [MEN-1](https://tracker.mender.io/browse/MEN-1), [MEN-9](https://tracker.mender.io/browse/MEN-9))
 * Changelog with Jira. N55
-  ([ARCHIVE-2](https://northerntech.atlassian.net/browse/ARCHIVE-2), [MEN-1111](https://northerntech.atlassian.net/browse/MEN-1111), [MEN-1](https://northerntech.atlassian.net/browse/MEN-1), [MEN-9](https://northerntech.atlassian.net/browse/MEN-9))
+  ([ARCHIVE-2](https://tracker.mender.io/browse/ARCHIVE-2), [MEN-1111](https://tracker.mender.io/browse/MEN-1111), [MEN-1](https://tracker.mender.io/browse/MEN-1), [MEN-9](https://tracker.mender.io/browse/MEN-9))
 * Changelog with Windows line endings N66
 * Changelog with inline Jira refs. N58a
-  ([ARCHIVE-7777](https://northerntech.atlassian.net/browse/ARCHIVE-7777), [MEN-7778](https://northerntech.atlassian.net/browse/MEN-7778), [MEN-80](https://northerntech.atlassian.net/browse/MEN-80), [MEN-81](https://northerntech.atlassian.net/browse/MEN-81))
+  ([ARCHIVE-7777](https://tracker.mender.io/browse/ARCHIVE-7777), [MEN-7778](https://tracker.mender.io/browse/MEN-7778), [MEN-80](https://tracker.mender.io/browse/MEN-80), [MEN-81](https://tracker.mender.io/browse/MEN-81))
 * Changelog with invalid signed-off N65
-
   Commit message
   Mention "Signed-off-by: " mid sentence
 * Changelog with many Jira refs. N57
-  ([ARCHIVE-2](https://northerntech.atlassian.net/browse/ARCHIVE-2), [MEN-1111](https://northerntech.atlassian.net/browse/MEN-1111), [MEN-12345](https://northerntech.atlassian.net/browse/MEN-12345), [MEN-1](https://northerntech.atlassian.net/browse/MEN-1), [MEN-9](https://northerntech.atlassian.net/browse/MEN-9))
+  ([ARCHIVE-2](https://tracker.mender.io/browse/ARCHIVE-2), [MEN-1111](https://tracker.mender.io/browse/MEN-1111), [MEN-12345](https://tracker.mender.io/browse/MEN-12345), [MEN-1](https://tracker.mender.io/browse/MEN-1), [MEN-9](https://tracker.mender.io/browse/MEN-9))
 * Changelog with signed-off N64
-
   Commit message
 * Changelog with suspicious number in it. N62
-
   1234
 * Changelog with suspicious number outside of it. N63
 * Commit with various "<something>-by:" tags
-
   Only this line should show in changelog N72
 * Complete Fix for changelog N4
-
   Should be included N5
-* Complete commit with inline entry N73
-
-  Should be included N74
 * Fix for changelog N1
 * Jira duplicate (commit) N51
-
-
   More stuff. N52
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
+  ([MEN-1234](https://tracker.mender.io/browse/MEN-1234))
 * Jira entries in parentheses (commit) N45
-
-
   Stuff. N46
-  ([MEN-4321](https://northerntech.atlassian.net/browse/MEN-4321), [MEN-54321](https://northerntech.atlassian.net/browse/MEN-54321))
+  ([MEN-4321](https://tracker.mender.io/browse/MEN-4321), [MEN-54321](https://tracker.mender.io/browse/MEN-54321))
 * Jira entries in parentheses (title) N41
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234), [MEN-2345](https://northerntech.atlassian.net/browse/MEN-2345))
+  ([MEN-1234](https://tracker.mender.io/browse/MEN-1234), [MEN-2345](https://tracker.mender.io/browse/MEN-2345))
 * Jira entries inline (commit) N47
-
-
-  Stuff N48
-  ([MEN-2345](https://northerntech.atlassian.net/browse/MEN-2345))
+  Stuff N48 ([MEN-2345](https://tracker.mender.io/browse/MEN-2345))
 * Jira entries inline (title) N43
-  ([MEN-2345](https://northerntech.atlassian.net/browse/MEN-2345))
+  ([MEN-2345](https://tracker.mender.io/browse/MEN-2345))
 * Jira entry N36
-
   Should be included N37
-  ([MEN-645](https://northerntech.atlassian.net/browse/MEN-645))
+  ([MEN-645](https://tracker.mender.io/browse/MEN-645))
 * Jira entry in title N38
-  ([MEN-76](https://northerntech.atlassian.net/browse/MEN-76))
+  ([MEN-76](https://tracker.mender.io/browse/MEN-76))
 * Jira twice (commit) N49
-
-
   More stuff. N50
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234), [MEN-2345](https://northerntech.atlassian.net/browse/MEN-2345))
+  ([MEN-1234](https://tracker.mender.io/browse/MEN-1234), [MEN-2345](https://tracker.mender.io/browse/MEN-2345))
 * Make sure the bugtracker reference is taken from the title
              and goes after this message. The title should not be
              included. N68
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234))
+  ([MEN-1234](https://tracker.mender.io/browse/MEN-1234))
 * Several entries for changelog N30
-
   Should be included N31
-
-
-
   And finally this, part of the commit message. N35
 * Should also be included, but separately and not twice. N32
 * Should be in changelog though. N29
 * Should be there N40
-  ([MEN-1234](https://northerntech.atlassian.net/browse/MEN-1234), [MEN-123](https://northerntech.atlassian.net/browse/MEN-123))
+  ([MEN-1234](https://tracker.mender.io/browse/MEN-1234), [MEN-123](https://tracker.mender.io/browse/MEN-123))
 * Some inline reference. N58b
-  ([ARCHIVE-7777](https://northerntech.atlassian.net/browse/ARCHIVE-7777), [MEN-7778](https://northerntech.atlassian.net/browse/MEN-7778), [MEN-80](https://northerntech.atlassian.net/browse/MEN-80), [MEN-81](https://northerntech.atlassian.net/browse/MEN-81))
+  ([ARCHIVE-7777](https://tracker.mender.io/browse/ARCHIVE-7777), [MEN-7778](https://tracker.mender.io/browse/MEN-7778), [MEN-80](https://tracker.mender.io/browse/MEN-80), [MEN-81](https://tracker.mender.io/browse/MEN-81))
 * Some inline reference. N60
-  ([ARCHIVE-7777](https://northerntech.atlassian.net/browse/ARCHIVE-7777), [MEN-7778](https://northerntech.atlassian.net/browse/MEN-7778), [MEN-80](https://northerntech.atlassian.net/browse/MEN-80), [MEN-81](https://northerntech.atlassian.net/browse/MEN-81))
+  ([ARCHIVE-7777](https://tracker.mender.io/browse/ARCHIVE-7777), [MEN-7778](https://tracker.mender.io/browse/MEN-7778), [MEN-80](https://tracker.mender.io/browse/MEN-80), [MEN-81](https://tracker.mender.io/browse/MEN-81))
 * Some other reference. N59
-  ([ARCHIVE-7777](https://northerntech.atlassian.net/browse/ARCHIVE-7777), [MEN-7778](https://northerntech.atlassian.net/browse/MEN-7778), [MEN-80](https://northerntech.atlassian.net/browse/MEN-80), [MEN-81](https://northerntech.atlassian.net/browse/MEN-81))
+  ([ARCHIVE-7777](https://tracker.mender.io/browse/ARCHIVE-7777), [MEN-7778](https://tracker.mender.io/browse/MEN-7778), [MEN-80](https://tracker.mender.io/browse/MEN-80), [MEN-81](https://tracker.mender.io/browse/MEN-81))
 * Some other reference. N61
-  ([ARCHIVE-7777](https://northerntech.atlassian.net/browse/ARCHIVE-7777), [MEN-7778](https://northerntech.atlassian.net/browse/MEN-7778), [MEN-80](https://northerntech.atlassian.net/browse/MEN-80), [MEN-81](https://northerntech.atlassian.net/browse/MEN-81))
+  ([ARCHIVE-7777](https://tracker.mender.io/browse/ARCHIVE-7777), [MEN-7778](https://tracker.mender.io/browse/MEN-7778), [MEN-80](https://tracker.mender.io/browse/MEN-80), [MEN-81](https://tracker.mender.io/browse/MEN-81))
 * Squashed commits N69
 * Squashed commits N69
 * This should be in changelog N8
@@ -739,108 +459,9 @@ diff -u expected.txt result.txt
 if [ $(egrep -v '^\*\*\* Commit [0-9a-f]{40} had a number 1234 which may be a ticket reference we missed\. Should be manually checked\.$' stderr.txt \
              | egrep -v '^\*\*\* Commit [0-9a-f]{40} had conflicting changelog tags\. This might be a squashed commit which will not work correctly with changelogs\. Should be manually checked\.$' \
              | egrep -v '^Checking .: HEAD:$' \
-             | egrep -v '^commit |^Author: |^Date: |^    |^---$|^$' \
              | wc -c) -ne 0 ]
 then
     echo 'Unexpected error message in:'
-    cat stderr.txt
-    exit 1
-fi
-
-################################################################################
-# Test Github integration.
-################################################################################
-
-mkdir mender
-( cd mender && "$SRC_DIR/changelog-generator" --repo --sort-changelog --query-github 3.3.0..3.4.0 > ../result.txt 2>../stderr.txt ) || {
-    echo "Script failed with $?"
-    echo "--------"
-    echo "result.txt:"
-    cat result.txt
-    echo "--------"
-    echo "stderr.txt:"
-    cat stderr.txt
-    exit 1
-}
-
-cat > expected.txt <<'EOF'
-### Changelogs
-
-#### mender (3.4.0)
-
-New changes in mender since 3.3.0:
-
-##### Bug Fixes
-
-* Append log entries to syslog at the correct level
-* By default we bind to 127.0.0.1:0 instead of localhost.
-* If paused before ArtifactReboot, and then manually
-  rebooting the device outside of Mender, the client will properly
-  resume the update now, instead of failing and rolling back.
-  ([MEN-5709](https://northerntech.atlassian.net/browse/MEN-5709))
-* Over D-Bus we return the ProxyHost equal to 127.0.0.1
-* Resolve symlinks for /dev/disk/by-partlabel
-* The client update and inventory checks are now unaffected by the use
-  of the `check-update` and `send-inventory` commands. While previously, this
-  would both move the intervals at which checks we're done, and also extend them
-  beyond the expected polling intervals configured.
-  ([INF-1000](https://northerntech.atlassian.net/browse/INF-1000), [MEN-5547](https://northerntech.atlassian.net/browse/MEN-5547))
-* Upgrade openssl dependency to fix cast error in recent Go.
-* rootfs-image-v2: Make sure to set mender_boot_part_hex
-* setenv: Fix script input syntax.
-
-##### Features
-
-* Add DaemonLogLevel parameter in configuration file
-  ([MEN-5583](https://northerntech.atlassian.net/browse/MEN-5583))
-
-##### Other
-
-* Upgrade mender-artifact library to latest
-
-EOF
-diff -u expected.txt result.txt
-
-# There should be no errors.
-if [ "$(cat stderr.txt)" != "" ]; then
-    echo "Unexpected stderr output after querying GitHub:"
-    cat stderr.txt
-    exit 1
-fi
-
-################################################################################
-
-"$SRC_DIR/changelog-generator" --repo --sort-changelog --query-github --github-repo mender-artifact 3.8.0..3.8.1 > result.txt 2>stderr.txt || {
-    echo "Script failed with $?"
-    echo "--------"
-    echo "result.txt:"
-    cat result.txt
-    echo "--------"
-    echo "stderr.txt:"
-    cat stderr.txt
-    exit 1
-}
-
-cat > expected.txt <<'EOF'
-### Changelogs
-
-#### mender-artifact (3.8.1)
-
-New changes in mender-artifact since 3.8.0:
-
-##### Bug Fixes
-
-* fixed an issue that prevented running mender-artifact in a
-  container
-* fixed an issue that prevented the makefile from working
-  with newer docker versions
-
-EOF
-diff -u expected.txt result.txt
-
-# There should be no errors.
-if [ "$(cat stderr.txt)" != "" ]; then
-    echo "Unexpected stderr output after querying GitHub:"
     cat stderr.txt
     exit 1
 fi

@@ -1,10 +1,10 @@
-# Copyright 2023 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,21 +15,17 @@
 import os
 import signal
 import subprocess
+import time
 
 import pytest
-from flaky import flaky
 
 from ..common_setup import running_custom_production_setup
 from ..MenderAPI import authentication, deployments, DeviceAuthV2, logger
 from .mendertesting import MenderTesting
-from testutils.common import wait_until_healthy
-from testutils.infra.container_manager.kubernetes_manager import isK8S
 
 
-class BaseTestDemoArtifact(MenderTesting):
+class TestDemoArtifact(MenderTesting):
     """A simple class for testing the demo-Artifact upload."""
-
-    EXTRA_ARGS = []
 
     # NOTE - The password is set on a per test-basis,
     # as it is generated on the fly by the demo script.
@@ -59,33 +55,23 @@ class BaseTestDemoArtifact(MenderTesting):
             test_env[
                 "DOCKER_COMPOSE_PROJECT_NAME"
             ] = running_custom_production_setup.name
-
-            # the infra layer sets MENDER_TESTPREFIX for the compose command on first run
-            # but here we're running the setup manually (the test does multiple ups/downs)
-            # the prefix is lost here, so re-set it to the correct value
-            test_env["MENDER_TESTPREFIX"] = running_custom_production_setup.name
-
-            args = [
-                "./demo",
-                "--client",
-                "-p",
-                running_custom_production_setup.name,
-            ]
-            args += self.EXTRA_ARGS
-            args.append("up")
-
             proc = subprocess.Popen(
-                args,
+                [
+                    "./demo",
+                    "--client",
+                    "-p",
+                    running_custom_production_setup.name,
+                    "up",
+                ],
                 cwd="..",
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
                 env=test_env,
             )
             logger.info("Started the demo script")
             password = ""
-
-            for line in proc.stdout:
+            time.sleep(60)
+            for line in iter(proc.stdout.readline, ""):
                 line = line.decode()
                 logger.info(line)
                 if exit_cond in line.strip():
@@ -96,7 +82,6 @@ class BaseTestDemoArtifact(MenderTesting):
                         self.auth.password = password
                         assert len(password) == 12
                     break
-            wait_until_healthy(running_custom_production_setup.name)
             return proc
 
         running_custom_production_setup.run_demo_script_up = run_demo_script_up
@@ -104,7 +89,6 @@ class BaseTestDemoArtifact(MenderTesting):
 
     # Give the test a timeframe, as the script might run forever,
     # if something goes awry, or the script is not brought down properly.
-    @flaky(max_runs=3)  # https://northerntech.atlassian.net/browse/MEN-4495
     @pytest.mark.timeout(3000)
     def test_demo_artifact(self, run_demo_script):
         """Tests that the demo script does indeed upload the demo Artifact to the server."""
@@ -141,15 +125,10 @@ class BaseTestDemoArtifact(MenderTesting):
             logger.error(str(arts))
             raise
         assert "mender-demo-artifact" in arts[0]["name"]
-
         # Bring down the demo script
-        logger.info("-- Terminating demo script")
         proc.send_signal(signal.SIGTERM)
-        # Continue logging stdout until process stops
-        for line in proc.stdout:
-            logger.info(line.decode())
         proc.wait()
-        assert proc.returncode == 0, "Demo script failed with non-zero exit code"
+        assert proc.returncode == 0
 
     def demo_artifact_installation(self, run_demo_script):
         """Tests that the demo-artifact is successfully deployed to a client device."""
@@ -191,17 +170,3 @@ class BaseTestDemoArtifact(MenderTesting):
         # the environment up a second time
         self.demo_artifact_upload(run_demo_script, exit_cond="The user already exists")
         logger.info("Finished")
-
-
-class TestDemoArtifactOpenSource(BaseTestDemoArtifact):
-    pass
-
-
-@pytest.mark.skipif(
-    isK8S(), reason="not relevant in a staging or production environment"
-)
-class TestDemoArtifactEnterprise(BaseTestDemoArtifact):
-    """A subclass of the BaseTestDemoArtifact class for testing the demo-Artifact
-    upload in Enterprise mode."""
-
-    EXTRA_ARGS = ["--enterprise-testing"]

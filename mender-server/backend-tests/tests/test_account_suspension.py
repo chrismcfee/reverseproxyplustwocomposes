@@ -1,10 +1,10 @@
-# Copyright 2021 Northern.tech AS
+# Copyright 2018 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,36 +12,37 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import pytest
+import random
 import time
-import uuid
 
+from testutils.common import mongo, clean_mongo
 from testutils.api.client import ApiClient
 import testutils.api.useradm as useradm
 import testutils.api.deviceauth as deviceauth
+import testutils.api.deviceauth_v2 as deviceauth_v2
 import testutils.api.tenantadm as tenantadm
 import testutils.api.deployments as deployments
+from testutils.infra.cli import CliTenantadm, CliUseradm
+import testutils.util.crypto
 from testutils.common import (
+    User,
     Device,
-    mongo,
-    clean_mongo,
+    Tenant,
     create_org,
     create_random_authset,
+    get_device_by_id_data,
     change_authset_status,
 )
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def tenants(clean_mongo):
     tenants = []
 
-    for n in range(2):
-        uuidv4 = str(uuid.uuid4())
-        tenant, username, password = (
-            "test.mender.io-" + uuidv4,
-            "some.user+" + uuidv4 + "@example.com",
-            "secretsecret",
-        )
-        tenants.append(create_org(tenant, username, password))
+    for n in ["tenant1", "tenant2"]:
+        username = "user@" + n + ".com"
+        password = "correcthorse"
+        tenants.append(create_org(n, username, password))
 
     yield tenants
 
@@ -49,7 +50,7 @@ def tenants(clean_mongo):
 @pytest.fixture(scope="function")
 def tenants_users_devices(tenants, mongo):
     uc = ApiClient(useradm.URL_MGMT)
-    devauthm = ApiClient(deviceauth.URL_MGMT)
+    devauthm = ApiClient(deviceauth_v2.URL_MGMT)
     devauthd = ApiClient(deviceauth.URL_DEVICES)
     for t in tenants:
         user = t.users[0]
@@ -68,7 +69,7 @@ def tenants_users_devices(tenants, mongo):
 
 class TestAccountSuspensionEnterprise:
     def test_user_cannot_log_in(self, tenants):
-        tc = ApiClient(tenantadm.URL_INTERNAL, host=tenantadm.HOST, schema="http://")
+        tc = ApiClient(tenantadm.URL_INTERNAL)
 
         uc = ApiClient(useradm.URL_MGMT)
 
@@ -105,9 +106,9 @@ class TestAccountSuspensionEnterprise:
             assert r.status_code == 200
 
     def test_authenticated_user_is_rejected(self, tenants):
-        tc = ApiClient(tenantadm.URL_INTERNAL, host=tenantadm.HOST, schema="http://")
+        tc = ApiClient(tenantadm.URL_INTERNAL)
         uc = ApiClient(useradm.URL_MGMT)
-        dc = ApiClient(deviceauth.URL_MGMT)
+        dc = ApiClient(deviceauth_v2.URL_MGMT)
 
         u = tenants[0].users[0]
 
@@ -118,7 +119,7 @@ class TestAccountSuspensionEnterprise:
         token = r.text
 
         # check can access an api
-        r = dc.with_auth(token).call("GET", deviceauth.URL_MGMT_DEVICES)
+        r = dc.with_auth(token).call("GET", deviceauth_v2.URL_DEVICES)
         assert r.status_code == 200
 
         # suspend tenant
@@ -133,14 +134,14 @@ class TestAccountSuspensionEnterprise:
         time.sleep(10)
 
         # check token is rejected
-        r = dc.with_auth(token).call("GET", deviceauth.URL_MGMT_DEVICES)
+        r = dc.with_auth(token).call("GET", deviceauth_v2.URL_DEVICES)
         assert r.status_code == 401
 
     def test_accepted_dev_cant_authenticate(self, tenants_users_devices):
         dacd = ApiClient(deviceauth.URL_DEVICES)
-        devauthm = ApiClient(deviceauth.URL_MGMT)
+        devauthm = ApiClient(deviceauth_v2.URL_MGMT)
         uc = ApiClient(useradm.URL_MGMT)
-        tc = ApiClient(tenantadm.URL_INTERNAL, host=tenantadm.HOST, schema="http://")
+        tc = ApiClient(tenantadm.URL_INTERNAL)
 
         # accept a dev
         device = tenants_users_devices[0].devices[0]
@@ -179,9 +180,9 @@ class TestAccountSuspensionEnterprise:
 
     def test_authenticated_dev_is_rejected(self, tenants_users_devices):
         dacd = ApiClient(deviceauth.URL_DEVICES)
-        devauthm = ApiClient(deviceauth.URL_MGMT)
+        devauthm = ApiClient(deviceauth_v2.URL_MGMT)
         uc = ApiClient(useradm.URL_MGMT)
-        tc = ApiClient(tenantadm.URL_INTERNAL, host=tenantadm.HOST, schema="http://")
+        tc = ApiClient(tenantadm.URL_INTERNAL)
         dc = ApiClient(deployments.URL_DEVICES)
 
         # accept a dev

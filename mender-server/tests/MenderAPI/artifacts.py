@@ -1,10 +1,10 @@
-# Copyright 2021 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,7 +31,7 @@ class Artifacts:
         image,
         device_type,
         artifact_name,
-        artifact_filename,
+        artifact_file_created,
         signed=False,
         scripts=[],
         global_flags="",
@@ -55,7 +55,7 @@ class Artifacts:
             image,
             device_type,
             artifact_name,
-            artifact_filename,
+            artifact_file_created.name,
             signed_arg,
             ("-v %d" % version) if version else "",
         )
@@ -71,60 +71,7 @@ class Artifacts:
         logger.info("Running: " + cmd)
         subprocess.check_call(cmd, shell=True)
 
-        return artifact_filename
-
-    def make_module_artifact(
-        self,
-        module_type,
-        device_type,
-        artifact_name,
-        artifact_filename,
-        files=[],
-        meta_data=None,
-        signed=False,
-        scripts=[],
-        global_flags="",
-        version=None,
-        depends={},
-        provides={},
-    ):
-        signed_arg = ""
-
-        if artifact_name.startswith("artifact_name="):
-            artifact_name = artifact_name.split("=")[1]
-
-        if signed:
-            private_key = "../extra/signed-artifact-client-testing/private.key"
-            assert os.path.exists(private_key), "private key for testing doesn't exist"
-            signed_arg = "-k %s" % (private_key)
-
-        cmd = "%s %s  write module-image -T %s -t %s -n %s -o %s %s %s %s" % (
-            self.artifacts_tool_path,
-            global_flags,
-            module_type,
-            device_type,
-            artifact_name,
-            artifact_filename,
-            ("-m %s" % meta_data) if meta_data else "",
-            signed_arg,
-            ("-v %d" % version) if version else "",
-        )
-        for file in files:
-            cmd += " -f %s" % file
-
-        for script in scripts:
-            cmd += " -s %s" % script
-
-        for key, value in depends.items():
-            cmd += " -d %s:%s" % (key, value)
-
-        for key, value in provides.items():
-            cmd += " -p %s:%s" % (key, value)
-
-        logger.info("Running: " + cmd)
-        subprocess.check_call(cmd, shell=True)
-
-        return artifact_filename
+        return artifact_file_created.name
 
     def get_mender_conf(self, image):
         """

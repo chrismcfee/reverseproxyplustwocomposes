@@ -1,10 +1,10 @@
-# Copyright 2021 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,22 +14,20 @@
 
 import json
 import time
-import uuid
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 from ..common_setup import standard_setup_one_client, enterprise_no_client
 from .mendertesting import MenderTesting
-from ..MenderAPI import auth, devauth, inv, logger
-from ..helpers import Helpers
+from ..MenderAPI import auth, auth_v2, inv, logger
 from testutils.infra.device import MenderDevice
 
 
 class TestPreauthBase(MenderTesting):
     def do_test_ok_preauth_and_bootstrap(self, container_manager):
         """
-        Test the happy path from preauthorizing a device to a successful bootstrap.
-        Verify that the device/auth set appear correctly in devauth API results.
+            Test the happy path from preauthorizing a device to a successful bootstrap.
+            Verify that the device/auth set appear correctly in devauth API results.
         """
         mender_device = container_manager.device
 
@@ -41,11 +39,11 @@ class TestPreauthBase(MenderTesting):
         # serialize manually to avoid an extra space (id data helper doesn't insert one)
         preauth_iddata_str = '{"mac":"mac-preauth"}'
 
-        r = devauth.preauth(json.loads(preauth_iddata_str), preauth_key)
+        r = auth_v2.preauth(json.loads(preauth_iddata_str), preauth_key)
         assert r.status_code == 201
 
         # verify the device appears correctly in api results
-        devs = devauth.get_devices(2)
+        devs = auth_v2.get_devices(2)
 
         dev_preauth = [d for d in devs if d["status"] == "preauthorized"]
         assert len(dev_preauth) == 1
@@ -63,7 +61,7 @@ class TestPreauthBase(MenderTesting):
         # verify api results - after some time the device should be 'accepted'
         for _ in range(120):
             time.sleep(15)
-            dev_accepted = devauth.get_devices_status(
+            dev_accepted = auth_v2.get_devices_status(
                 status="accepted", expected_devices=2
             )
             if len([d for d in dev_accepted if d["status"] == "accepted"]) == 1:
@@ -84,11 +82,11 @@ class TestPreauthBase(MenderTesting):
         assert dev_accepted["auth_sets"][0]["pubkey"] == preauth_key
 
         # verify device was issued a token
-        Helpers.check_log_have_authtoken(mender_device)
+        Client.have_authtoken(mender_device)
 
     def do_test_ok_preauth_and_remove(self):
         """
-        Test the removal of a preauthorized auth set, verify it's gone from all API results.
+            Test the removal of a preauthorized auth set, verify it's gone from all API results.
         """
         # preauthorize
         preauth_iddata = json.loads('{"mac":"preauth-mac"}')
@@ -103,28 +101,28 @@ UwIDAQAB
 -----END PUBLIC KEY-----
 """
 
-        r = devauth.preauth(preauth_iddata, preauth_key)
+        r = auth_v2.preauth(preauth_iddata, preauth_key)
         assert r.status_code == 201
 
-        devs = devauth.get_devices(2)
+        devs = auth_v2.get_devices(2)
 
         dev_preauth = [d for d in devs if d["identity_data"] == preauth_iddata]
         assert len(dev_preauth) == 1
         dev_preauth = dev_preauth[0]
 
         # remove from deviceauth
-        r = devauth.delete_auth_set(
+        r = auth_v2.delete_auth_set(
             dev_preauth["id"], dev_preauth["auth_sets"][0]["id"]
         )
         assert r.status_code == 204
 
         # verify removed from deviceauth
-        devs = devauth.get_devices(1)
+        devs = auth_v2.get_devices(1)
         dev_removed = [d for d in devs if d["identity_data"] == preauth_iddata]
         assert len(dev_removed) == 0
 
         # verify removed from deviceauth
-        r = devauth.get_device(dev_preauth["id"])
+        r = auth_v2.get_device(dev_preauth["id"])
         assert r.status_code == 404
 
         # verify removed from inventory
@@ -133,10 +131,10 @@ UwIDAQAB
 
     def do_test_fail_preauth_existing(self):
         """
-        Test 'conflict' response when an identity data set already exists.
+           Test 'conflict' response when an identity data set already exists.
         """
         # wait for the device to appear
-        devs = devauth.get_devices(1)
+        devs = auth_v2.get_devices(1)
         dev = devs[0]
 
         # try to preauthorize the same id data, new key
@@ -150,7 +148,7 @@ iyYyh1852rti3Afw4mDxuVSD7sd9ggvYMc0QHIpQNkD4YWOhNiE1AB0zH57VbUYG
 UwIDAQAB
 -----END PUBLIC KEY-----
 """
-        r = devauth.preauth(dev["identity_data"], preauth_key)
+        r = auth_v2.preauth(dev["identity_data"], preauth_key)
         assert r.status_code == 409
 
 
@@ -179,12 +177,7 @@ class TestPreauthEnterprise(TestPreauthBase):
         self.do_test_fail_preauth_existing()
 
     def __create_tenant_and_container(self, container_manager):
-        uuidv4 = str(uuid.uuid4())
-        auth.new_tenant(
-            "test.mender.io-" + uuidv4,
-            "some.user+" + uuidv4 + "@example.com",
-            "hunter2hunter2",
-        )
+        auth.new_tenant("admin", "admin@tenant.com", "hunter2hunter2")
         token = auth.current_tenant["tenant_token"]
 
         container_manager.new_tenant_client("tenant-container", token)
@@ -202,6 +195,7 @@ class Client:
 
     KEYGEN_TIMEOUT = 300
     DEVICE_ACCEPTED_TIMEOUT = 600
+    MENDER_STORE_TIMEOUT = 600
 
     @staticmethod
     def get_logs(device):
@@ -242,6 +236,32 @@ class Client:
         """Restart the mender service."""
 
         device.run("systemctl restart %s.service" % device.get_client_service_name())
+
+    @staticmethod
+    def have_authtoken(device):
+        """Verify that the device was authenticated by checking its data store for the authtoken."""
+        sleepsec = 0
+        while sleepsec < Client.MENDER_STORE_TIMEOUT:
+            try:
+                out = device.run(
+                    "strings {} | grep authtoken".format(Client.MENDER_STORE)
+                )
+                return out != ""
+            except:
+                output_from_journalctl = device.run(
+                    "journalctl -u %s -l" % device.get_client_service_name()
+                )
+                logger.info("Logs from client: " + output_from_journalctl)
+
+                time.sleep(10)
+                sleepsec += 10
+                logger.info(
+                    "waiting for mender-store file, sleepsec: {}".format(sleepsec)
+                )
+
+        assert (
+            sleepsec <= Client.MENDER_STORE_TIMEOUT
+        ), "timeout for mender-store file exceeded"
 
     @staticmethod
     def __wait_for_keygen(device):

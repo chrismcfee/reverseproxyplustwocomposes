@@ -1,10 +1,10 @@
-# Copyright 2023 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,28 +17,18 @@ import random
 import time
 import string
 import tempfile
-import uuid
 import os
 import subprocess
 from contextlib import contextmanager
-from typing import List
 
-import docker
-import redo
-import requests
-
-from redo import retrier
-
-import testutils.api.deviceauth as deviceauth
-import testutils.api.inventory as inventory
+import testutils.api.deviceauth as deviceauth_v1
+import testutils.api.deviceauth_v2 as deviceauth_v2
 import testutils.api.tenantadm as tenantadm
 import testutils.api.useradm as useradm
 import testutils.util.crypto
-from testutils.api.client import ApiClient, GATEWAY_HOSTNAME
-from testutils.infra.container_manager.kubernetes_manager import isK8S
+from testutils.api.client import ApiClient
 from testutils.infra.mongo import MongoClient
 from testutils.infra.cli import CliUseradm, CliTenantadm
-from testutils.infra.device import MenderDevice, MenderDeviceGroup
 
 
 @pytest.fixture(scope="session")
@@ -46,12 +36,13 @@ def mongo():
     return MongoClient("mender-mongo:27017")
 
 
-@pytest.fixture(scope="function")
+@pytest.yield_fixture(scope="function")
 def clean_mongo(mongo):
     """Fixture setting up a clean (i.e. empty database). Yields
     pymongo.MongoClient connected to the DB."""
     mongo_cleanup(mongo)
     yield mongo.client
+    mongo_cleanup(mongo)
 
 
 def mongo_cleanup(mongo):
@@ -59,12 +50,10 @@ def mongo_cleanup(mongo):
 
 
 class User:
-    def __init__(self, id, name, pwd, roles=[]):
+    def __init__(self, id, name, pwd):
         self.name = name
         self.pwd = pwd
         self.id = id
-        self.token = None
-        self.roles = roles
 
 
 class Authset:
@@ -78,30 +67,13 @@ class Authset:
 
 
 class Device:
-    def __init__(self, id, id_data, pubkey, tenant_token="", status="", privkey=""):
+    def __init__(self, id, id_data, pubkey, tenant_token=""):
         self.id = id
         self.id_data = id_data
         self.pubkey = pubkey
-        self.privkey = privkey
         self.tenant_token = tenant_token
         self.authsets = []
         self.token = None
-        self.status = status
-
-    def send_inventory(self):
-        invd = ApiClient(inventory.URL_DEV)
-        r = invd.with_auth(self.token).call(
-            "PATCH", inventory.URL_DEVICE_ATTRIBUTES, self.inventory
-        )
-        assert r.status_code == 200
-
-    def send_auth_request(self):
-        devauthd = ApiClient(deviceauth.URL_DEVICES)
-        body, sighdr = deviceauth.auth_req(
-            self.id_data, self.pubkey, self.privkey, self.tenant_token
-        )
-        r = devauthd.call("POST", deviceauth.URL_AUTH_REQS, body, headers=sighdr)
-        return r
 
 
 class Tenant:
@@ -114,21 +86,19 @@ class Tenant:
 
 
 def create_random_authset(dauthd1, dauthm, utoken, tenant_token=""):
-    """create_device with random id data and keypair"""
-    priv, pub = testutils.util.crypto.get_keypair_rsa()
+    """ create_device with random id data and keypair"""
+    priv, pub = testutils.util.crypto.rsa_get_keypair()
     mac = ":".join(["{:02x}".format(random.randint(0x00, 0xFF), "x") for i in range(6)])
     id_data = {"mac": mac}
 
     return create_authset(dauthd1, dauthm, id_data, pub, priv, utoken, tenant_token)
 
 
-def create_authset(
-    dauthd1, dauthm, id_data, pubkey, privkey, utoken, tenant_token=""
-) -> Authset:
-    body, sighdr = deviceauth.auth_req(id_data, pubkey, privkey, tenant_token)
+def create_authset(dauthd1, dauthm, id_data, pubkey, privkey, utoken, tenant_token=""):
+    body, sighdr = deviceauth_v1.auth_req(id_data, pubkey, privkey, tenant_token)
 
     # submit auth req
-    r = dauthd1.call("POST", deviceauth.URL_AUTH_REQS, body, headers=sighdr)
+    r = dauthd1.call("POST", deviceauth_v1.URL_AUTH_REQS, body, headers=sighdr)
     assert r.status_code == 401, r.text
 
     # dev must exist and have *this* aset
@@ -138,7 +108,7 @@ def create_authset(
     aset = [
         a
         for a in api_dev["auth_sets"]
-        if testutils.util.crypto.compare_keys(a["pubkey"], pubkey)
+        if testutils.util.crypto.rsa_compare_keys(a["pubkey"], pubkey)
     ]
     assert len(aset) == 1, str(aset)
 
@@ -150,51 +120,33 @@ def create_authset(
     return Authset(aset["id"], api_dev["id"], id_data, pubkey, privkey, "pending")
 
 
-def create_user(
-    name: str,
-    pwd: str,
-    tid: str = "",
-    containers_namespace: str = "backend-tests",
-    roles: list = [],
-) -> User:
+def create_user(name, pwd, tid="", containers_namespace="backend-tests"):
     cli = CliUseradm(containers_namespace)
-    uid = cli.create_user(name, pwd, tid, roles=roles)
+
+    uid = cli.create_user(name, pwd, tid)
 
     return User(uid, name, pwd)
 
 
-def create_org(
-    name: str,
-    username: str,
-    password: str,
-    plan: str = "os",
-    addons: List[str] = [],
-    containers_namespace: str = "backend-tests",
-    container_manager=None,
-) -> Tenant:
-    cli = CliTenantadm(
-        containers_namespace=containers_namespace, container_manager=container_manager
-    )
+def create_org(name, username, password, plan="os"):
+    cli = CliTenantadm()
     user_id = None
-    tenant_id = cli.create_org(name, username, password, plan=plan, addons=addons)
+    tenant_id = cli.create_org(name, username, password, plan=plan)
     tenant_token = json.loads(cli.get_tenant(tenant_id))["tenant_token"]
-
-    host = GATEWAY_HOSTNAME
-    if container_manager is not None:
-        host = container_manager.get_mender_gateway()
-    api = ApiClient(useradm.URL_MGMT, host=host)
-
-    # Try log in every second for 2 minutes.
+    api = ApiClient(useradm.URL_MGMT)
+    # Try log in every second for 3 minutes.
     # - There usually is a slight delay (in order of ms) for propagating
     #   the created user to the db.
-    for _ in retrier(attempts=120, sleepscale=1, sleeptime=1):
+    for i in range(3 * 60):
         rsp = api.call("POST", useradm.URL_LOGIN, auth=(username, password))
         if rsp.status_code == 200:
             break
+        time.sleep(1)
 
-    assert (
-        rsp.status_code == 200
-    ), "User could not log in within two minutes after organization has been created."
+    if rsp.status_code != 200:
+        raise ValueError(
+            "User could not log in within three minutes after organization has been created."
+        )
 
     user_token = rsp.text
     rsp = api.with_auth(user_token).call("GET", useradm.URL_USERS)
@@ -203,12 +155,11 @@ def create_org(
         if user["email"] == username:
             user_id = user["id"]
             break
-    if user_id is None:
+    if user_id == None:
         raise ValueError("Error retrieving user id.")
 
     tenant = Tenant(name, tenant_id, tenant_token)
     user = User(user_id, username, password)
-    user.token = user_token
     tenant.users.append(user)
     return tenant
 
@@ -223,7 +174,7 @@ def get_device_by_id_data(dauthm, id_data, utoken):
         qs_params["page"] = page
         qs_params["per_page"] = per_page
         r = dauthm.with_auth(utoken).call(
-            "GET", deviceauth.URL_MGMT_DEVICES, qs_params=qs_params
+            "GET", deviceauth_v2.URL_DEVICES, qs_params=qs_params
         )
         assert r.status_code == 200
         api_devs = r.json()
@@ -235,7 +186,7 @@ def get_device_by_id_data(dauthm, id_data, utoken):
         if len(api_devs) == 0:
             break
 
-    assert len(found) == 1, "device not found by id data"
+    assert len(found) == 1
 
     return found[0]
 
@@ -243,8 +194,8 @@ def get_device_by_id_data(dauthm, id_data, utoken):
 def change_authset_status(dauthm, did, aid, status, utoken):
     r = dauthm.with_auth(utoken).call(
         "PUT",
-        deviceauth.URL_AUTHSET_STATUS,
-        deviceauth.req_status(status),
+        deviceauth_v2.URL_AUTHSET_STATUS,
+        deviceauth_v2.req_status(status),
         path_params={"did": did, "aid": aid},
     )
     assert r.status_code == 204
@@ -257,18 +208,15 @@ def rand_id_data():
     return {"mac": mac, "sn": sn}
 
 
-def make_pending_device(
-    dauthd1: ApiClient, dauthm: ApiClient, utoken: str, tenant_token: str = ""
-) -> Device:
-    """Create one device with "pending" status."""
+def make_pending_device(dauthd1, dauthm, utoken, tenant_token=""):
     id_data = rand_id_data()
 
-    priv, pub = testutils.util.crypto.get_keypair_rsa()
+    priv, pub = testutils.util.crypto.rsa_get_keypair()
     new_set = create_authset(
         dauthd1, dauthm, id_data, pub, priv, utoken, tenant_token=tenant_token
     )
 
-    dev = Device(new_set.did, new_set.id_data, pub, tenant_token, privkey=priv)
+    dev = Device(new_set.did, new_set.id_data, pub, tenant_token)
 
     dev.authsets.append(new_set)
 
@@ -277,91 +225,36 @@ def make_pending_device(
     return dev
 
 
-def make_accepted_device(
-    dauthd1: ApiClient,
-    dauthm: ApiClient,
-    utoken: str,
-    tenant_token: str = "",
-    test_type: str = "regular",
-) -> Device:
-    """Create one device with "accepted" status."""
-    test_types = ["regular", "azure", "aws"]
-    if test_type not in test_types:
-        raise RuntimeError("Given test type is not allowed")
+def make_accepted_device(dauthd1, dauthm, utoken, tenant_token=""):
     dev = make_pending_device(dauthd1, dauthm, utoken, tenant_token=tenant_token)
     aset_id = dev.authsets[0].id
     change_authset_status(dauthm, dev.id, aset_id, "accepted", utoken)
+
     aset = dev.authsets[0]
     aset.status = "accepted"
 
-    # TODO: very bad workaround for Azure IoT Hub backend test; following part is responsible for creating
-    # TODO: additonal, unnecessary auth set which causes Azure test to fail
-    if test_type == "regular":
-        # obtain auth token
-        body, sighdr = deviceauth.auth_req(
-            aset.id_data, aset.pubkey, aset.privkey, tenant_token
-        )
-        r = dauthd1.call("POST", deviceauth.URL_AUTH_REQS, body, headers=sighdr)
-        assert r.status_code == 200
-        dev.token = r.text
+    # obtain auth token
+    body, sighdr = deviceauth_v1.auth_req(
+        aset.id_data, aset.pubkey, aset.privkey, tenant_token
+    )
+
+    r = dauthd1.call("POST", deviceauth_v1.URL_AUTH_REQS, body, headers=sighdr)
+
+    assert r.status_code == 200
+    dev.token = r.text
 
     dev.status = "accepted"
 
     return dev
 
 
-def make_accepted_devices(devauthd, devauthm, utoken, tenant_token="", num_devices=1):
-    """Create accepted devices.
-    returns list of Device objects."""
-    devices = []
-
-    # some 'accepted' devices, single authset
-    for _ in range(num_devices):
-        dev = make_accepted_device(devauthd, devauthm, utoken, tenant_token)
-        devices.append(dev)
-
-    return devices
-
-
-def make_device_with_inventory(attributes, utoken, tenant_token):
-    devauthm = ApiClient(deviceauth.URL_MGMT)
-    devauthd = ApiClient(deviceauth.URL_DEVICES)
-    invm = ApiClient(inventory.URL_MGMT)
-
-    d = make_accepted_device(devauthd, devauthm, utoken, tenant_token)
+def randstr():
+    """ Random suffix generation.
+        Useful when we need e.g. unique object ids so that
+        parallel test runs don't step on each other's data.
     """
-    verify that the status of the device in inventory is "accepted"
-    """
-    accepted = False
-    timeout = 10
-    for i in range(timeout):
-        r = invm.with_auth(utoken).call("GET", inventory.URL_DEVICE.format(id=d.id))
-        if r.status_code == 200:
-            dj = r.json()
-            for attr in dj["attributes"]:
-                if attr["name"] == "status" and attr["value"] == "accepted":
-                    accepted = True
-                    break
-        if accepted:
-            break
-        time.sleep(1)
-    if not accepted:
-        raise ValueError(
-            "status for device %s has not been propagated within %d seconds"
-            % (d.id, timeout)
-        )
-
-    submit_inventory(attributes, d.token)
-
-    d.attributes = attributes
-
-    return d
-
-
-def submit_inventory(attrs, token):
-    invd = ApiClient(inventory.URL_DEV)
-    r = invd.with_auth(token).call("PATCH", inventory.URL_DEVICE_ATTRIBUTES, attrs)
-    assert r.status_code == 200
+    charset = string.ascii_letters + string.digits
+    return "".join(random.choice(charset) for i in range(5))
 
 
 @contextmanager
@@ -405,201 +298,3 @@ def get_mender_artifact(
     finally:
         os.unlink(filename)
         os.path.exists(artifact) and os.unlink(artifact)
-
-
-def wait_until_healthy(compose_project: str = "", timeout: int = 60):
-    """
-    wait_until_healthy polls all running containers health check
-    endpoints until they return a non-error status code.
-    :param compose_project: the docker-compose project ID, if empty it
-                            checks all running containers.
-    :param timeout: timeout in seconds.
-    """
-    client = docker.from_env()
-    kwargs = {}
-    if compose_project != "":
-        kwargs["filters"] = {"label": f"com.docker.compose.project={compose_project}"}
-
-    path_map = {
-        "mender-api-gateway": "/ping",
-        "mender-auditlogs": "/api/internal/v1/auditlogs/health",
-        "mender-deviceconnect": "/api/internal/v1/deviceconnect/health",
-        "mender-deviceconfig": "/api/internal/v1/deviceconfig/health",
-        "mender-device-auth": "/api/internal/v1/devauth/health",
-        "mender-deployments": "/api/internal/v1/deployments/health",
-        "mender-inventory": "/api/internal/v1/inventory/health",
-        "mender-tenantadm": "/api/internal/v1/tenantadm/health",
-        "mender-useradm": "/api/internal/v1/useradm/health",
-        "mender-workflows": "/api/v1/health",
-        "minio": "/minio/health/live",
-    }
-
-    containers = client.containers.list(all=True, **kwargs)
-    for container in containers:
-
-        container_ip = None
-        for _, net in container.attrs["NetworkSettings"]["Networks"].items():
-            container_ip = net["IPAddress"]
-            break
-        if container_ip is None or container_ip == "":
-            continue
-
-        service = container.labels.get(
-            "com.docker.compose.service", container.name
-        ).split("-enterprise")[0]
-        if service.startswith("mender-workflows-server"):
-            service = "mender-workflows"
-
-        path = path_map.get(service)
-        if path is None:
-            continue
-        port = 8080 if service != "minio" else 9000
-
-        for _ in redo.retrier(attempts=timeout, sleeptime=1):
-            try:
-                rsp = requests.request("GET", f"http://{container_ip}:{port}{path}")
-            except requests.exceptions.ConnectionError:
-                # A ConnectionError is expected if the service is not running yet
-                continue
-            if rsp.status_code < 300:
-                break
-        else:
-            raise TimeoutError(
-                f"Timed out waiting for service '{service}' to become healthy"
-            )
-
-
-def update_tenant(tid, addons=None, plan=None, container_manager=None):
-    """Call internal PUT tenantadm/tenants/{tid}"""
-    update = {}
-    if addons is not None:
-        update["addons"] = tenantadm.make_addons(addons)
-
-    if plan is not None:
-        update["plan"] = plan
-
-    tenantadm_host = (
-        tenantadm.HOST
-        if isK8S() or container_manager is None
-        else container_manager.get_ip_of_service("mender-tenantadm")[0] + ":8080"
-    )
-    tadm = ApiClient(tenantadm.URL_INTERNAL, host=tenantadm_host, schema="http://")
-    res = tadm.call(
-        "PUT", tenantadm.URL_INTERNAL_TENANT, body=update, path_params={"tid": tid},
-    )
-    assert res.status_code == 202
-
-
-def new_tenant_client(
-    test_env, name: str, tenant: str, docker: bool = False, network: str = "mender"
-) -> MenderDevice:
-    """Create new Mender client in the test environment with the given name for the given tenant.
-
-    The passed test_env must implement new_tenant_client and/or new_tenant_docker_client.
-
-    This helper attaches the recently created Mender client to the test environment, so that systemd
-    logs can be printed on test failures.
-    """
-
-    pre_existing_clients = set(test_env.get_mender_clients(network=network))
-    if docker:
-        test_env.new_tenant_docker_client(name, tenant)
-    else:
-        test_env.new_tenant_client(name, tenant)
-    all_clients = set(test_env.get_mender_clients(network=network))
-    new_client = all_clients - pre_existing_clients
-    assert len(new_client) == 1
-    device = MenderDevice(new_client.pop())
-    if hasattr(test_env, "device_group"):
-        test_env.device_group.append(device)
-    else:
-        test_env.device = device
-        test_env.device_group = MenderDeviceGroup(
-            test_env.get_mender_clients(network=network)
-        )
-    return device
-
-
-def create_tenant_test_setup() -> Tenant:
-    """ Creates a tenant and a user belonging to the tenant (both tenant and user are created with random names). """
-    uuidv4 = str(uuid.uuid4())
-    tenant, username, password = (
-        "test.mender.io-" + uuidv4,
-        "some.user+" + uuidv4 + "@example.com",
-        "secretsecret",
-    )
-    tenant = create_org(tenant, username, password, "enterprise")
-    user = create_user(
-        "foo+" + uuidv4 + "@user.com", "correcthorsebatterystaple", tid=tenant.id
-    )
-
-    response = ApiClient(useradm.URL_MGMT).call(
-        "POST", useradm.URL_LOGIN, auth=(user.name, user.pwd)
-    )
-    assert response.status_code == 200
-    user.utoken = response.text
-    tenant.users = [user]
-    return tenant
-
-
-def create_user_test_setup() -> User:
-    """Create a user with random name, log user in. """
-    uuidv4 = str(uuid.uuid4())
-    user_name, password = (
-        "some.user+" + uuidv4 + "@example.com",
-        "secretsecret",
-    )
-
-    user = create_user(user_name, password)
-    useradmm = ApiClient(useradm.URL_MGMT)
-    # log in user
-    response = useradmm.call("POST", useradm.URL_LOGIN, auth=(user.name, user.pwd))
-    assert response.status_code == 200
-    user.utoken = response.text
-    return user
-
-
-def useExistingTenant() -> bool:
-    return bool(os.environ.get("USE_EXISTING_TENANT"))
-
-
-def setup_tenant_devices(tenant, device_groups):
-    """
-    setup_user_devices authenticates the user and creates devices
-    attached to (static) groups given by the proportion map from
-    the groups parameter.
-    :param users:     Users to setup devices for (list).
-    :param n_devices: Number of accepted devices created for each
-                      user (int).
-    :param groups:    Map of group names to device proportions, the
-                      sum of proportion must be less than or equal
-                      to 1 (dict[str] = float)
-    :return: Dict mapping group_name -> list(devices)
-    """
-    devauth_DEV = ApiClient(deviceauth.URL_DEVICES)
-    devauth_MGMT = ApiClient(deviceauth.URL_MGMT)
-    invtry_MGMT = ApiClient(inventory.URL_MGMT)
-    user = tenant.users[0]
-    grouped_devices = {}
-    group = None
-
-    tenant.devices = []
-    for group, dev_cnt in device_groups.items():
-        grouped_devices[group] = []
-        for i in range(dev_cnt):
-            device = make_accepted_device(
-                devauth_DEV, devauth_MGMT, user.token, tenant.tenant_token
-            )
-            if group is not None:
-                rsp = invtry_MGMT.with_auth(user.token).call(
-                    "PUT",
-                    inventory.URL_DEVICE_GROUP.format(id=device.id),
-                    body={"group": group},
-                )
-                assert rsp.status_code == 204
-
-            device.group = group
-            grouped_devices[group].append(device)
-            tenant.devices.append(device)
-
-    return grouped_devices

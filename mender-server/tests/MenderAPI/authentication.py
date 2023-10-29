@@ -1,10 +1,10 @@
-# Copyright 2022 Northern.tech AS
+# Copyright 2020 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+#        https://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import json
+import os
 import time
 from requests.auth import HTTPBasicAuth
 
@@ -22,7 +23,6 @@ from . import get_container_manager
 from .requests_helpers import requests_retry
 
 from testutils.infra.cli import CliUseradm, CliTenantadm
-from testutils.infra.container_manager.kubernetes_manager import isK8S
 
 
 class Authentication:
@@ -32,9 +32,7 @@ class Authentication:
     username = "admin@admin.net"
     password = "averyverystrongpasswordthatyouwillneverguess!haha!"
 
-    multitenancy = isK8S()
-    if isK8S():
-        plan = "enterprise"
+    multitenancy = False
     current_tenant = {}
 
     def __init__(self, name=org_name, username=username, password=password):
@@ -85,7 +83,7 @@ class Authentication:
         )
 
         if create_new_user:
-            if r.status_code != 200:
+            if r.status_code is not 200:
                 if self.multitenancy and self.org_create:
                     tenant_id = self._create_org(
                         self.org_name, self.username, self.password, self.plan
@@ -114,6 +112,7 @@ class Authentication:
                 time.sleep(1)
             assert r.status_code == 200
 
+        logger.info("Using Authorization headers: " + str(r.text))
         return self.auth_header
 
     def create_user(self, username, password, tenant_id=""):
@@ -138,7 +137,6 @@ class Authentication:
 
         if r.status_code == 200:
             self.auth_header = {"Authorization": "Bearer " + str(r.text)}
-        logger.info("Using Authorization headers: " + str(r.text))
         return r
 
     def _create_org(self, name, username, password, plan="os"):

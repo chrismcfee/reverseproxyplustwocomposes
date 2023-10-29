@@ -1,42 +1,9 @@
-# Copyright 2021 Northern.tech AS
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
 import io
 import os
 import random
 import tarfile
 import hashlib
 import json
-
-# Valid state-script states
-_valid_states = (
-    "ArtifactInstall_Enter",
-    "ArtifactInstall_Leave",
-    "ArtifactInstall_Error",
-    "ArtifactReboot_Enter",
-    "ArtifactReboot_Leave",
-    "ArtifactReboot_Error",
-    "ArtifactCommit_Enter",
-    "ArtifactCommit_Leave",
-    "ArtifactCommit_Error",
-    "ArtifactRollback_Enter",
-    "ArtifactRollback_Leave",
-    "ArtifactRollbackReboot_Enter",
-    "ArtifactRollbackReboot_Leave",
-    "ArtifactFailure_Enter",
-    "ArtifactFailure_Leave",
-)
 
 
 class Artifact:
@@ -54,7 +21,7 @@ class Artifact:
         device_types,
         artifact_group=None,
         payload=None,
-        payload_type="rootfs-image",
+        payload_type="rootfs_image",
         provides=None,
         depends=None,
     ):
@@ -77,7 +44,6 @@ class Artifact:
         self._provide_keys = ["artifact_name"]
         self._depends = {"header-info": {"device_type": device_types}}
         self._depend_keys = ["device_type"]
-        self._state_scripts = []
 
         if artifact_group is not None:
             self._provides["header-info"]["artifact_group"] = artifact_group
@@ -89,21 +55,7 @@ class Artifact:
         if payload is not None:
             self.add_payload(payload, payload_type, depends, provides)
 
-    def add_state_script(self, state, script):
-        if state not in _valid_states:
-            raise ValueError("%s is not a valid state, check artifact specifications")
-
-        if isinstance(script, str):
-            script = io.BytesIO(script.encode())
-        elif isinstance(script, bytes):
-            script = io.BytesIO(script)
-        elif not isinstance(script, io.IOBase):
-            raise TypeError(
-                "script must be an instance of either str, bytes of io.IOBase"
-            )
-        self._state_scripts.append((state, script))
-
-    def add_payload(self, fd, payload_type="rootfs-image", depends=None, provides=None):
+    def add_payload(self, fd, payload_type="rootfs_image", depends=None, provides=None):
         """
         add_payload adds another payload to the payload section.
         NOTE: provides- and depends-keys must be unique across payloads.
@@ -258,12 +210,6 @@ class Artifact:
         tarhdr = tarfile.TarInfo("header-info")
         tarhdr.size = size
         hdr_tar.addfile(tarhdr, hdr_info)
-
-        for state, script in self._state_scripts:
-            tarhdr = tarfile.TarInfo("scripts/" + state)
-            tarhdr.size = script.seek(0, io.SEEK_END)
-            script.seek(0)
-            hdr_tar.addfile(tarhdr, script)
 
         for filename in sorted(self._payloads.keys()):
             path_prefix = os.path.join(

@@ -1,11 +1,10 @@
-version: '2.3'
+version: '2.1'
 services:
 
     #
     # mender-legacy-client 
     #
     mender-client:
-        image: mendersoftware/mender-client-qemu:1.7.0
-        volumes:
-          # Provision demo certificate
-          - ./cert/cert.crt:/mnt/config/server.crt
+            image: mendersoftware/mender-client-qemu:1.7.0
+            
+
