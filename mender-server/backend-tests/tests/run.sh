@@ -1,4 +1,4 @@
 #!/bin/bash
 sleep 30
 
-python3 -m pytest -s /tests/test_*.py "$@"
+py.test-3 -s /tests/test_*.py "$@"

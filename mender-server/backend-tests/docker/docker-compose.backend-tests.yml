@@ -1,4 +1,4 @@
-version: '2.1'
+version: '2'
 services:
     mender-backend-tests-runner:
         image: mender-backend-tests-runner
@@ -6,12 +6,7 @@ services:
             - mender
         volumes:
             - ${INTEGRATION_PATH}/backend-tests/tests:/tests
-            - ${INTEGRATION_PATH}/testutils:/testutils
             - /var/run/docker.sock:/var/run/docker.sock
         depends_on:
             - mender-api-gateway
         command: ${PYTEST_ARGS}
-        environment:
-            PYTHONPATH: "/testutils"
-            PYTHONDONTWRITEBYTECODE: 1
-            TENANTADM_STRIPE_API_KEY: ${STRIPE_API_KEY}

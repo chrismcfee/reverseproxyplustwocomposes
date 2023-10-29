@@ -1,4 +1,5 @@
-# Copyright 2020 Northern.tech AS
+#!/usr/bin/python
+# Copyright 2017 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,14 +13,15 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from fabric.api import *
 import pytest
-
-from .. import conftest
-from ..common_setup import standard_setup_with_signed_artifact_client
-from .common_update import update_image, common_update_procedure
-from ..MenderAPI import auth_v2, deploy
-from .mendertesting import MenderTesting
-
+import time
+from common import *
+from common_setup import *
+from helpers import Helpers
+from MenderAPI import adm, deploy, image, logger
+from common_update import update_image_successful, update_image_failed, common_update_procedure
+from mendertesting import MenderTesting
 
 @MenderTesting.fast
 class TestSignedUpdates(MenderTesting):
@@ -28,35 +30,32 @@ class TestSignedUpdates(MenderTesting):
         we will only test basic backend integration with signed images here.
     """
 
-    def test_signed_artifact_success(
-        self, standard_setup_with_signed_artifact_client, valid_image
-    ):
+    @pytest.mark.usefixtures("standard_setup_with_signed_artifact_client")
+    def test_signed_artifact_success(self):
+        if not env.host_string:
+            execute(self.test_signed_artifact_success,
+                    hosts=get_mender_clients())
+            return
 
-        update_image(
-            standard_setup_with_signed_artifact_client.device,
-            standard_setup_with_signed_artifact_client.get_virtual_network_host_ip(),
-            install_image=valid_image,
-            signed=True,
-        )
+        update_image_successful(install_image=conftest.get_valid_image(), signed=True)
 
-    @pytest.mark.parametrize(
-        "standard_setup_with_signed_artifact_client", ["force_new"], indirect=True
-    )
-    def test_unsigned_artifact_fails_deployment(
-        self, standard_setup_with_signed_artifact_client, valid_image
-    ):
+    @pytest.mark.parametrize("standard_setup_with_signed_artifact_client", ["force_new"], indirect=True)
+    def test_unsigned_artifact_fails_deployment(self, standard_setup_with_signed_artifact_client):
         """
             Make sure that an unsigned image fails, and is handled by the backend.
             Notice that this test needs a fresh new version of the backend, since
             we installed a signed image earlier without a verification key in mender.conf
         """
+        if not env.host_string:
+            execute(self.test_unsigned_artifact_fails_deployment,
+                    standard_setup_with_signed_artifact_client,
+                    hosts=get_mender_clients())
+            return
 
-        deployment_id, _ = common_update_procedure(install_image=valid_image)
+        deployment_id, _ = common_update_procedure(install_image=conftest.get_valid_image())
         deploy.check_expected_status("finished", deployment_id)
         deploy.check_expected_statistics(deployment_id, "failure", 1)
 
-        for d in auth_v2.get_devices():
-            assert (
-                "expecting signed artifact, but no signature file found"
-                in deploy.get_logs(d["id"], deployment_id)
-            )
+        for d in adm.get_devices():
+            assert "expecting signed artifact, but no signature file found" in \
+                deploy.get_logs(d["device_id"], deployment_id)

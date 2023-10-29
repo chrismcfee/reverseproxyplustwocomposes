@@ -1,8 +1,0 @@
-version: '2.1'
-services:
-
-    mender-client:
-        # Needs to be built in mender client's test directory.
-        image: mendersoftware/mender-client-docker:2.3.0b1
-        networks:
-            - mender

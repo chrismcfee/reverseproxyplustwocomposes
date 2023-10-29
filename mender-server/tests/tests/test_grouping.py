@@ -1,4 +1,5 @@
-# Copyright 2020 Northern.tech AS
+#!/usr/bin/python
+# Copyright 2017 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,15 +13,18 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from .. import conftest
-from ..common_setup import standard_setup_two_clients_bootstrapped
-from .common_update import common_update_procedure
-from ..MenderAPI import inv, deploy, logger
-from .mendertesting import MenderTesting
-from ..helpers import Helpers
-
+from fabric.api import *
+import pytest
+import time
+from common import *
+from common_setup import *
+from helpers import Helpers
+from common_update import common_update_procedure
+from MenderAPI import deploy, inv
+from mendertesting import MenderTesting
 
 @MenderTesting.fast
+@pytest.mark.usefixtures("standard_setup_two_clients_bootstrapped")
 class TestGrouping(MenderTesting):
     def validate_group_responses(self, device_map):
         """Checks whether the device_map corresponds to the server's view of
@@ -44,27 +48,21 @@ class TestGrouping(MenderTesting):
             else:
                 groups_map[group] = [device]
 
-        assert sorted(inv.get_groups()) == sorted(groups)
-        assert sorted(
-            [device["id"] for device in inv.get_devices(has_group=True)]
-        ) == sorted(devices_with_group)
-        assert sorted(
-            [device["id"] for device in inv.get_devices(has_group=False)]
-        ) == sorted(devices_without_group)
-        assert sorted([device["id"] for device in inv.get_devices()]) == sorted(
-            device_map.keys()
-        )
+        assert(sorted(inv.get_groups()) == sorted(groups))
+        assert(sorted([device['id'] for device in inv.get_devices(has_group=True)]) == sorted(devices_with_group))
+        assert(sorted([device['id'] for device in inv.get_devices(has_group=False)]) == sorted(devices_without_group))
+        assert(sorted([device['id'] for device in inv.get_devices()]) == sorted(device_map.keys()))
 
         for group in groups:
-            assert sorted(inv.get_devices_in_group(group)) == sorted(groups_map[group])
+            assert(sorted(inv.get_devices_in_group(group)) == sorted(groups_map[group]))
         for device in device_map:
-            assert inv.get_device_group(device)["group"] == device_map[device]
+            assert(inv.get_device_group(device)['group'] == device_map[device])
 
-    def test_basic_groups(self, standard_setup_two_clients_bootstrapped):
+    def test_basic_groups(self):
         """Tests various group operations."""
 
-        devices = [device["id"] for device in inv.get_devices()]
-        assert len(devices) == 2
+        devices = [device['id'] for device in inv.get_devices()]
+        assert(len(devices) == 2)
 
         # Purely for easier reading: Assign labels to each device.
         alpha = devices[0]
@@ -91,9 +89,8 @@ class TestGrouping(MenderTesting):
         inv.delete_device_from_group(bravo, "Red")
         self.validate_group_responses({alpha: None, bravo: None})
 
-    def test_update_device_group(
-        self, standard_setup_two_clients_bootstrapped, valid_image
-    ):
+
+    def test_update_device_group(self):
         """
             Perform a successful upgrade on one group of devices, and assert that:
             * deployment status/logs are correct.
@@ -105,56 +102,60 @@ class TestGrouping(MenderTesting):
         """
 
         # Beware that there will two parallel things going on below, one for
-        # each group. We aim to update the group alpha, not beta.
+        # each group, hence a lot of separate execute() calls for each. We aim
+        # to update the group alpha, not beta.
 
-        mender_device_group = standard_setup_two_clients_bootstrapped.device_group
-        assert len(mender_device_group) == 2
-        alpha = mender_device_group[0]
-        bravo = mender_device_group[1]
+        clients = get_mender_clients()
+        assert(len(clients) == 2)
+        alpha = clients[0]
+        bravo = clients[1]
 
-        ip_to_device_id = Helpers.ip_to_device_id_map(mender_device_group)
-        id_alpha = ip_to_device_id[alpha.host_string]
-        id_bravo = ip_to_device_id[bravo.host_string]
-        logger.info("ID of alpha host: %s" % id_alpha)
-        logger.info("ID of bravo host: %s" % id_bravo)
+        ip_to_device_id = Helpers.ip_to_device_id_map(clients)
+        id_alpha = ip_to_device_id[alpha]
+        id_bravo = ip_to_device_id[bravo]
+        print("ID of alpha host: %s\nID of bravo host: %s" % (id_alpha, id_bravo))
 
-        # TODO: parallelize these using fabric.group.ThreadingGroup once we upgrade to Python 3
-        pass_part_alpha = alpha.get_passive_partition()
-        pass_part_bravo = bravo.get_passive_partition()
+        ret = execute(Helpers.get_passive_partition, hosts=clients)
+        pass_part_alpha = ret[alpha]
+        pass_part_bravo = ret[bravo]
 
         inv.put_device_in_group(id_alpha, "Update")
 
-        reboot = {alpha: None, bravo: None}
-        host_ip = standard_setup_two_clients_bootstrapped.get_virtual_network_host_ip()
-        with alpha.get_reboot_detector(host_ip) as reboot[
-            alpha
-        ], bravo.get_reboot_detector(host_ip) as reboot[bravo]:
+        reboot = { alpha: None, bravo: None }
+        with Helpers.RebootDetector(alpha) as reboot[alpha], Helpers.RebootDetector(bravo) as reboot[bravo]:
 
-            deployment_id, expected_image_id = common_update_procedure(
-                valid_image, devices=[id_alpha]
-            )
+            deployment_id, expected_image_id = common_update_procedure(conftest.get_valid_image(),
+                                                                       devices=[id_alpha])
 
-            # Extra long wait here, because a real update takes quite a lot of time.
-            reboot[bravo].verify_reboot_not_performed(300)
-            reboot[alpha].verify_reboot_performed()
+            @parallel
+            def verify_reboot_performed_for_alpha_only():
+                if env.host_string == alpha:
+                    reboot[alpha].verify_reboot_performed()
+                elif env.host_string == bravo:
+                    # Extra long wait here, because a real update takes quite a lot
+                    # of time.
+                    reboot[bravo].verify_reboot_not_performed(300)
+                else:
+                    raise Exception("verify_reboot_performed_for_alpha_only() called with unknown host")
 
-        assert alpha.get_passive_partition() != pass_part_alpha
-        assert bravo.get_passive_partition() == pass_part_bravo
+            execute(verify_reboot_performed_for_alpha_only, hosts=clients)
 
-        assert alpha.get_active_partition() == pass_part_alpha
-        assert bravo.get_active_partition() != pass_part_bravo
+        ret = execute(Helpers.get_passive_partition, hosts=clients)
+        assert ret[alpha] != pass_part_alpha
+        assert ret[bravo] == pass_part_bravo
+        ret = execute(Helpers.get_active_partition, hosts=clients)
+        assert ret[alpha] == pass_part_alpha
+        assert ret[bravo] != pass_part_bravo
 
-        deploy.check_expected_statistics(
-            deployment_id, expected_status="success", expected_count=1
-        )
+        deploy.check_expected_statistics(deployment_id, expected_status="success", expected_count=1)
 
         # No logs for either host: alpha because it was successful, bravo
         # because it should never have attempted an update in the first place.
         for id in [id_alpha, id_bravo]:
             deploy.get_logs(id, deployment_id, expected_status=404)
 
-        assert alpha.yocto_id_installed_on_machine() == expected_image_id
-        assert bravo.yocto_id_installed_on_machine() != expected_image_id
+        assert execute(Helpers.yocto_id_installed_on_machine, hosts=alpha)[alpha] == expected_image_id
+        assert execute(Helpers.yocto_id_installed_on_machine, hosts=bravo)[bravo] != expected_image_id
 
         # Important: Leave the groups as you found them: Empty.
         inv.delete_device_from_group(id_alpha, "Update")

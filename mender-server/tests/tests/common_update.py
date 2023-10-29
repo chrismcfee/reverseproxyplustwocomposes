@@ -1,4 +1,5 @@
-# Copyright 2020 Northern.tech AS
+#!/usr/bin/python
+# Copyright 2017 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,73 +13,51 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import tempfile
+from common_docker import *
+from common import *
+from helpers import Helpers
+from MenderAPI import adm, deploy, image, logger
 import random
-
+from fabric.api import *
+import tempfile
+from tests import artifact_lock
 import pytest
 
-from .. import conftest
-from ..helpers import Helpers
-from ..MenderAPI import auth_v2, deploy, image, logger
-from . import artifact_lock
 
-
-def common_update_procedure(
-    install_image=None,
-    regenerate_image_id=True,
-    device_type=conftest.machine_name,
-    verify_status=True,
-    signed=False,
-    devices=None,
-    scripts=[],
-    pre_upload_callback=lambda: None,
-    pre_deployment_callback=lambda: None,
-    deployment_triggered_callback=lambda: None,
-    make_artifact=None,
-    compression_type="gzip",
-    version=None,
-):
+def common_update_procedure(install_image,
+                            regenerate_image_id=True,
+                            device_type=conftest.machine_name,
+                            broken_image=False,
+                            verify_status=True,
+                            signed=False,
+                            devices=None,
+                            scripts=[],
+                            pre_upload_callback=lambda: None,
+                            pre_deployment_callback=lambda: None,
+                            deployment_triggered_callback=lambda: None):
 
     with artifact_lock:
-        if regenerate_image_id:
-            artifact_id = "mender-%s" % str(random.randint(0, 99999999))
+        if broken_image:
+            artifact_id = "broken_image_" + str(random.randint(0, 999999))
+        elif regenerate_image_id:
+            artifact_id = Helpers.artifact_id_randomize(install_image)
             logger.debug("randomized image id: " + artifact_id)
         else:
             artifact_id = Helpers.yocto_id_from_ext4(install_image)
 
-        # create artifact
+        # create atrifact
         with tempfile.NamedTemporaryFile() as artifact_file:
-            if make_artifact:
-                created_artifact = make_artifact(artifact_file.name, artifact_id)
-            else:
-                compression_arg = "--compression " + compression_type
-                created_artifact = image.make_rootfs_artifact(
-                    install_image,
-                    device_type,
-                    artifact_id,
-                    artifact_file,
-                    signed=signed,
-                    scripts=scripts,
-                    global_flags=compression_arg,
-                    version=version,
-                )
+            created_artifact = image.make_artifact(install_image, device_type, artifact_id, artifact_file, signed=signed, scripts=scripts)
 
             if created_artifact:
                 pre_upload_callback()
                 deploy.upload_image(created_artifact)
                 if devices is None:
-                    devices = list(
-                        set(
-                            [
-                                device["id"]
-                                for device in auth_v2.get_devices_status("accepted")
-                            ]
-                        )
-                    )
+                    devices = list(set([device["device_id"] for device in adm.get_devices_status("accepted")]))
                 pre_deployment_callback()
-                deployment_id = deploy.trigger_deployment(
-                    name="New valid update", artifact_name=artifact_id, devices=devices
-                )
+                deployment_id = deploy.trigger_deployment(name="New valid update",
+                                                          artifact_name=artifact_id,
+                                                          devices=devices)
             else:
                 logger.warn("failed to create artifact")
                 pytest.fail("error creating artifact")
@@ -90,22 +69,14 @@ def common_update_procedure(
 
     return deployment_id, artifact_id
 
-
-def update_image(
-    device,
-    host_ip,
-    expected_mender_clients=1,
-    install_image=None,
-    regenerate_image_id=True,
-    signed=False,
-    scripts=[],
-    pre_upload_callback=lambda: None,
-    pre_deployment_callback=lambda: None,
-    deployment_triggered_callback=lambda: None,
-    make_artifact=None,
-    compression_type="gzip",
-    version=None,
-):
+def update_image_successful(install_image,
+                            regenerate_image_id=True,
+                            signed=False,
+                            skip_reboot_verification=False,
+                            expected_mender_clients=1,
+                            pre_upload_callback=lambda: None,
+                            pre_deployment_callback=lambda: None,
+                            deployment_triggered_callback=lambda: None):
     """
         Perform a successful upgrade, and assert that deployment status/logs are correct.
 
@@ -114,97 +85,70 @@ def update_image(
         Logs will not be retrieved, and result in 404.
     """
 
-    previous_inactive_part = device.get_passive_partition()
-    with device.get_reboot_detector(host_ip) as reboot:
-        deployment_id, expected_image_id = common_update_procedure(
-            install_image,
-            regenerate_image_id,
-            signed=signed,
-            scripts=scripts,
-            pre_upload_callback=pre_upload_callback,
-            pre_deployment_callback=pre_deployment_callback,
-            deployment_triggered_callback=deployment_triggered_callback,
-            make_artifact=make_artifact,
-            compression_type=compression_type,
-            version=version,
-        )
+    previous_inactive_part = Helpers.get_passive_partition()
+    with Helpers.RebootDetector() as reboot:
+        deployment_id, expected_image_id = common_update_procedure(install_image,
+                                                                   regenerate_image_id,
+                                                                   signed=signed,
+                                                                   pre_deployment_callback=pre_deployment_callback,
+                                                                   deployment_triggered_callback=deployment_triggered_callback)
         reboot.verify_reboot_performed()
 
+    with Helpers.RebootDetector() as reboot:
         try:
-            assert device.get_active_partition() == previous_inactive_part
+            assert Helpers.get_active_partition() == previous_inactive_part
         except AssertionError:
             logs = []
-            for d in auth_v2.get_devices():
-                logs.append(deploy.get_logs(d["id"], deployment_id))
+            for d in adm.get_devices():
+                logs.append(deploy.get_logs(d["device_id"], deployment_id))
 
-            pytest.fail(
-                "device did not flip partitions during update, here are the device logs:\n\n %s"
-                % (logs)
-            )
+            pytest.fail("device did not flip partitions during update, here are the device logs:\n\n %s" % (logs))
 
-        deploy.check_expected_statistics(
-            deployment_id, "success", expected_mender_clients
-        )
 
-        for d in auth_v2.get_devices():
-            deploy.get_logs(d["id"], deployment_id, expected_status=404)
+        deploy.check_expected_statistics(deployment_id, "success", expected_mender_clients)
 
-    assert device.yocto_id_installed_on_machine() == expected_image_id
+        for d in adm.get_devices():
+            deploy.get_logs(d["device_id"], deployment_id, expected_status=404)
+
+        if not skip_reboot_verification:
+            reboot.verify_reboot_not_performed()
+
+    assert Helpers.yocto_id_installed_on_machine() == expected_image_id
 
     deploy.check_expected_status("finished", deployment_id)
 
     # make sure backend recognizes signed and unsigned images
     artifact_id = deploy.get_deployment(deployment_id)["artifacts"][0]
     artifact_info = deploy.get_artifact_details(artifact_id)
-    assert (
-        artifact_info["signed"] is signed
-    ), "image was not correct recognized as signed/unsigned"
+    assert artifact_info["signed"] is signed, "image was not correct recognized as signed/unsigned"
 
     return deployment_id
 
 
-def update_image_failed(
-    device,
-    host_ip,
-    expected_mender_clients=1,
-    expected_log_message="Reboot to new update failed",
-    install_image="broken_update.ext4",
-    make_artifact=None,
-):
+def update_image_failed(install_image="broken_update.ext4", expected_mender_clients=1):
     """
         Perform a upgrade using a broken image (random data)
         The device will reboot, uboot will detect this is not a bootable image, and revert to the previous partition.
         The resulting upgrade will be considered a failure.
     """
 
-    original_image_id = device.yocto_id_installed_on_machine()
+    devices_accepted = get_mender_clients()
+    original_image_id = Helpers.yocto_id_installed_on_machine()
 
-    previous_active_part = device.get_active_partition()
-    with device.get_reboot_detector(host_ip) as reboot:
-        deployment_id, _ = common_update_procedure(
-            install_image, make_artifact=make_artifact
-        )
-        # It will reboot twice. Once into the failed update, which the
-        # bootloader will roll back, and therefore we will end up on the
-        # original partition. Then once more because of the
-        # ArtifactRollbackReboot step. Previously this rebooted only once,
-        # because we only supported rootfs images, and could make assumptions
-        # about where we would end up. However, with update modules we prefer to
-        # be conservative, and reboot one more time after the rollback to make
-        # *sure* we are in the correct partition.
-        reboot.verify_reboot_performed(number_of_reboots=2)
+    previous_active_part = Helpers.get_active_partition()
+    with Helpers.RebootDetector() as reboot:
+        deployment_id, _ = common_update_procedure(install_image, broken_image=True)
+        reboot.verify_reboot_performed()
 
-    with device.get_reboot_detector(host_ip) as reboot:
-        assert device.get_active_partition() == previous_active_part
+    with Helpers.RebootDetector() as reboot:
+        assert Helpers.get_active_partition() == previous_active_part
 
-        deploy.check_expected_statistics(
-            deployment_id, "failure", expected_mender_clients
-        )
+        deploy.check_expected_statistics(deployment_id, "failure", expected_mender_clients)
 
-        for d in auth_v2.get_devices():
-            assert expected_log_message in deploy.get_logs(d["id"], deployment_id)
+        for d in adm.get_devices():
+            assert "got invalid entrypoint into the state machine" in deploy.get_logs(d["device_id"], deployment_id)
 
-        assert device.yocto_id_installed_on_machine() == original_image_id
+        assert Helpers.yocto_id_installed_on_machine() == original_image_id
         reboot.verify_reboot_not_performed()
 
     deploy.check_expected_status("finished", deployment_id)

@@ -8,9 +8,6 @@ SERVICES="\
   mender-useradm \
   mender-device-auth \
   mender-deployments \
-  mender-create-artifact-worker \
-  mender-workflows-server \
-  mender-workflows-worker \
 "
 
 DB_SERVICES="\
@@ -18,9 +15,6 @@ DB_SERVICES="\
   mender-mongo-inventory \
   mender-mongo-device-auth \
   mender-mongo-deployments \
-  mender-create-artifact-worker \
-  mender-workflows-server \
-  mender-workflows-worker \
 "
 
 OLD_DB_VOLUMES="\
@@ -28,9 +22,6 @@ OLD_DB_VOLUMES="\
   mender-inventory-db \
   mender-deviceauth-db \
   mender-deployments-db \
-  mender-create-artifact-worker-db \
-  mender-workflows-server-db \
-  mender-workflows-worker-db \
 "
 
 

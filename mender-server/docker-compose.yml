@@ -1,11 +1,11 @@
-version: '2.1'
+version: '2'
 services:
 
     #
     # mender-deployments
     #
     mender-deployments:
-        image: mendersoftware/deployments:mender-2.4.0b1
+        image: mendersoftware/deployments:master
         extends:
             file: common.yml
             service: mender-base
@@ -18,24 +18,20 @@ services:
     # mender-gui
     #
     mender-gui:
-        image: mendersoftware/gui:mender-2.4.0b1
+        image: mendersoftware/gui:master
         extends:
             file: common.yml
             service: mender-base
         networks:
             - mender
         environment:
-            - GATEWAY_IP
             - INTEGRATION_VERSION
-            - MENDER_ARTIFACT_VERSION
-            - MENDER_VERSION
-            - MENDER_DEB_PACKAGE_VERSION
 
     #
     # mender-api-gateway
     #
     mender-api-gateway:
-        image: mendersoftware/api-gateway:mender-2.4.0b1
+        image: mendersoftware/api-gateway:master
         extends:
             file: common.yml
             service: mender-base
@@ -54,9 +50,7 @@ services:
     # mender-device-auth
     #
     mender-device-auth:
-        image: mendersoftware/deviceauth:mender-2.4.0b1
-        environment:
-            DEVICEAUTH_ORCHESTRATOR_ADDR: http://mender-workflows-server:8080/
+        image: mendersoftware/deviceauth:master
         extends:
             file: common.yml
             service: mender-base
@@ -64,13 +58,12 @@ services:
             - mender
         depends_on:
             - mender-mongo
-            - mender-workflows-server
 
     #
     # mender-inventory
     #
     mender-inventory:
-        image: mendersoftware/inventory:mender-2.4.0b1
+        image: mendersoftware/inventory:master
         extends:
             file: common.yml
             service: mender-base
@@ -83,79 +76,54 @@ services:
     # mender-useradm
     #
     mender-useradm:
-        image: mendersoftware/useradm:mender-2.4.0b1
+        image: mendersoftware/useradm:master
         extends:
             file: common.yml
             service: mender-base
-        networks:
-            - mender
-        depends_on:
-            - mender-mongo
-
-    #
-    # mender-workflows-server
-    #
-    mender-workflows-server:
-        image: mendersoftware/workflows:mender-2.4.0b1
-        environment:
-            WORKFLOWS_MONGO_URL: mongodb://mender-mongo:27017
-        extends:
-            file: common.yml
-            service: mender-base
-        networks:
-            - mender
-        depends_on:
-            - mender-mongo
-
-    #
-    # mender-workflows-worker
-    #
-    mender-workflows-worker:
-        image: mendersoftware/workflows-worker:mender-2.4.0b1
-        command: worker --excluded-workflows generate_artifact
-        environment:
-            WORKFLOWS_MONGO_URL: mongodb://mender-mongo:27017
-        extends:
-            file: common.yml
-            service: mender-base
-        networks:
-            - mender
-        depends_on:
-            - mender-mongo
-
-    #
-    # mender-create-artifact-worker
-    #
-    mender-create-artifact-worker:
-        image: mendersoftware/create-artifact-worker:mender-2.4.0b1
-        environment:
-            WORKFLOWS_MONGO_URL: mongodb://mender-mongo:27017
-        extends:
-            file: common.yml
-            service: mender-base
-        environment:
-            - WORKFLOWS_MONGO_URL=mongodb://mongo-workflows:27017
-            - CREATE_ARTIFACT_GATEWAY_URL=https://mender-api-gateway
-            - CREATE_ARTIFACT_DEPLOYMENTS_URL=http://mender-deployments:8080
         networks:
             - mender
         depends_on:
             - mender-mongo
 
     mender-mongo:
-        image: mongo:3.6
+        image: mongo:3.4
         extends:
             file: common.yml
             service: mender-base
         networks:
             mender:
                 aliases:
-                    - mongo-tenantadm
                     - mongo-deployments
                     - mongo-device-auth
                     - mongo-inventory
                     - mongo-useradm
-                    - mongo-workflows
+
+    mender-conductor:
+        image: mendersoftware/mender-conductor:master
+        depends_on:
+            - mender-elasticsearch
+            - mender-redis
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+
+    mender-elasticsearch:
+        image: mendersoftware/elasticsearch:2.4
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+
+    mender-redis:
+        image: redis:3.2.11-alpine
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
 
 networks:
     mender:

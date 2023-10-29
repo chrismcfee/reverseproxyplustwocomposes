@@ -1,4 +1,4 @@
-version: '2.1'
+version: '2'
 services:
 
     #
@@ -10,8 +10,6 @@ services:
             mender:
                 aliases:
                     - minio.s3.docker.mender.io
-        environment:
-            MINIO_HTTP_TRACE: /dev/stdout
         command: server /export
 
     #
@@ -25,12 +23,6 @@ services:
                 aliases:
                     - s3.docker.mender.io
         depends_on:
-            minio:
-                condition: service_healthy
-
-    #
-    # mender-deployments depends on storage-proxy if minio is in use
-    #
-    mender-deployments:
-        depends_on:
-            - storage-proxy
+            - minio
+        volumes:
+            - ./storage-proxy/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf

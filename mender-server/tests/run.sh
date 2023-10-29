@@ -1,52 +1,29 @@
 #!/bin/bash
 set -x -e
 
+DEFAULT_TESTS=tests/
 MACHINE_NAME=qemux86-64
-DOWNLOAD_REQUIREMENTS="true"
 
-export PYTHONDONTWRITEBYTECODE=1
-
-usage() {
-    echo "Usage: $ run.sh [-h|--help] [--machine-name[=]<machine-name>] [--no-download] [--get-requirements] [ -- [<pytest-args>] [tests/<testfile.py>] ]"
-    echo
-    echo "    -h                               Display help"
-    echo "    --machine-name[=] <machine-name> Specify the machine to test"
-    echo "    --no-download                    Do not download the external dependencies"
-    echo "    --get-requirements               Download the external binary requirements into ./downloaded-tools and exit"
-    echo "    --                               Seperates 'run.sh' arguments from pytest arguments"
-    echo "    <pytest-args>                    Passes these arguments along to pytest"
-    echo "    tests/<testfile.py>              Name the test-file to run"
-    echo
-    echo "Recognized Environment Variables:"
-    echo
-    echo "XDIST_PARALLEL_ARG                 The number of parallel jobs for pytest-xdist"
-    echo "SPECIFIC_INTEGRATION_TEST          The ability to pass <testname-regexp> to pytest -k"
-    exit 0
+check_tests_arguments() {
+    while [ -n "$1" ]; do
+        case "$1" in
+            --machine-name=*)
+                MACHINE_NAME="${1#--machine-name=}"
+                ;;
+            --machine-name)
+                shift
+                MACHINE_NAME="$1"
+                ;;
+            tests/*)
+                # Allow test files to be named on command line by removing ours.
+                DEFAULT_TESTS=
+                ;;
+        esac
+        shift
+    done
 }
 
-while [ -n "$1" ]; do
-    case "$1" in
-        -h|--help)
-            set +x
-            usage
-            ;;
-        --machine-name=*)
-            MACHINE_NAME="${1#--machine-name=}"
-            ;;
-        --machine-name)
-            shift
-            MACHINE_NAME="$1"
-            ;;
-        --no-download)
-            DOWNLOAD_REQUIREMENTS=""
-            ;;
-        -- )
-            shift
-            # Pass on the rest of the arguments un-touched to pytest
-            break ;;
-    esac
-    shift
-done
+check_tests_arguments "$@"
 
 MENDER_BRANCH=$(../extra/release_tool.py --version-of mender)
 
@@ -84,7 +61,7 @@ function get_requirements() {
     # Download what we need.
     mkdir -p downloaded-tools
 
-    curl --fail "https://d1b0l86ne08fsf.cloudfront.net/mender-artifact/${MENDER_ARTIFACT_BRANCH}/linux/mender-artifact" \
+    curl --fail "https://d1b0l86ne08fsf.cloudfront.net/mender-artifact/${MENDER_ARTIFACT_BRANCH}/mender-artifact" \
          -o downloaded-tools/mender-artifact \
          -z downloaded-tools/mender-artifact
 
@@ -95,42 +72,30 @@ function get_requirements() {
 
     chmod +x downloaded-tools/mender-artifact
 
+    curl --fail "https://mender.s3-accelerate.amazonaws.com/temp_${MENDER_BRANCH}/core-image-full-cmdline-$MACHINE_NAME.ext4" \
+         -o core-image-full-cmdline-$MACHINE_NAME.ext4 \
+         -z core-image-full-cmdline-$MACHINE_NAME.ext4
+
     if [ $? -ne 0 ]; then
-        echo "failed to download ext4 image"
+        echo "failed to download ext4 image" 
         exit 1
     fi
 
-    curl --fail "https://raw.githubusercontent.com/mendersoftware/mender/${MENDER_BRANCH}/support/modules-artifact-gen/directory-artifact-gen" \
-         -o downloaded-tools/directory-artifact-gen \
-         -z downloaded-tools/directory-artifact-gen
+   curl --fail "https://stress-client.s3-accelerate.amazonaws.com/release/mender-stress-test-client" \
+        -o downloaded-tools/mender-stress-test-client \
+        -z downloaded-tools/mender-stress-test-client
 
     if [ $? -ne 0 ]; then
-        echo "failed to download directory-artifact-gen"
+        echo "failed to download mender-stress-test-client" 
         exit 1
     fi
 
-    chmod +x downloaded-tools/directory-artifact-gen
-
-    if [ $? -ne 0 ]; then
-        echo "failed to download directory-artifact-gen"
-        exit 1
-    fi
+    chmod +x downloaded-tools/mender-stress-test-client
 
     export PATH=$PWD/downloaded-tools:$PATH
 
+    modify_services_for_testing
     inject_pre_generated_ssh_keys
-}
-
-# Old ways of getting the image, now deprecated, but still needed for images
-# built with thud or older.
-get_ext4_image_deprecated() {
-    if [[ -n "$BUILDDIR" ]]; then
-        cp -f "$BUILDDIR/tmp/deploy/images/$MACHINE_NAME/core-image-full-cmdline-$MACHINE_NAME.ext4" .
-    elif [[ -n "$DOWNLOAD_REQUIREMENTS" ]]; then
-        curl --fail "https://mender.s3-accelerate.amazonaws.com/temp_${MENDER_BRANCH}/core-image-full-cmdline-$MACHINE_NAME.ext4" \
-             -o core-image-full-cmdline-$MACHINE_NAME.ext4 \
-             -z core-image-full-cmdline-$MACHINE_NAME.ext4
-    fi
 }
 
 if [[ $1 == "--get-requirements" ]]; then
@@ -140,57 +105,79 @@ fi
 
 dd if=/dev/zero of=large_image.dat bs=300M count=0 seek=1
 
-if [[ -z "$BUILDDIR" ]] && [[ -n "$DOWNLOAD_REQUIREMENTS" ]]; then
+if [[ -n "$BUILDDIR" ]]; then
+    # Get the necessary path directly from the build.
+
+    # On branches without recipe specific sysroots, the next step will fail
+    # because the prepare_recipe_sysroot task doesn't exist. Use that failure
+    # to fall back to the old generic sysroot path.
+    if ( cd "$BUILDDIR" && bitbake -c prepare_recipe_sysroot mender-test-dependencies ); then
+        eval "$(cd "$BUILDDIR" && bitbake -e mender-test-dependencies | grep '^export PATH=')":"$PATH"
+    else
+        eval "$(cd "$BUILDDIR" && bitbake -e core-image-minimal | grep '^export PATH=')":"$PATH"
+    fi
+
+    cp -f "$BUILDDIR/tmp/deploy/images/$MACHINE_NAME/core-image-full-cmdline-$MACHINE_NAME.ext4" .
+
+    # mender-stress-test-client is here
+    export PATH=$PATH:~/go/bin/
+
+    modify_services_for_testing
+else
     get_requirements
 fi
 
-mkdir -p output
-ret=0
-docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-       mendersoftware/mender-client-qemu:$(../extra/release_tool.py --version-of mender-client-qemu --version-type docker) || ret=$?
-if [ $ret -eq 0 ]; then
-    # There is `extract_fs` support. Get the R/O image too.
-    docker run --rm --privileged --entrypoint /extract_fs -v $PWD/output:/output \
-           mendersoftware/mender-client-qemu-rofs:$(../extra/release_tool.py --version-of mender-client-qemu-rofs --version-type docker)
-    mv output/* .
-else
-    # Old style ext4 fetching.
-    get_ext4_image_deprecated
-fi
-rmdir output
 
-modify_services_for_testing
 
 cp -f core-image-full-cmdline-$MACHINE_NAME.ext4 core-image-full-cmdline-$MACHINE_NAME-broken-network.ext4
 debugfs -w -R "rm /lib/systemd/systemd-networkd" core-image-full-cmdline-$MACHINE_NAME-broken-network.ext4
 
 dd if=/dev/urandom of=broken_update.ext4 bs=10M count=5
 
-# Contains either the arguments to xdists, or '--maxfail=1', if xdist not found.
-EXTRA_TEST_ARGS=
-HTML_REPORT="--html=report.html --self-contained-html"
+if [[ -z $AWS_ACCESS_KEY_ID ]] || [[ -z $AWS_SECRET_ACCESS_KEY ]] ; then
+    echo "AWS credentials (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) are not set, not running S3 tests"
+else
+    if [[ ! -d ../keys-generated ]]; then
+        ( cd .. && CERT_API_CN=docker.mender.io CERT_STORAGE_CN=s3.docker.mender.io ./keygen )
+    fi
 
-if ! python3 -m pip show pytest-xdist >/dev/null; then
-    EXTRA_TEST_ARGS="--maxfail=1"
+    if [[ $@ == **--runs3** ]]; then
+        py.test --maxfail=1 -s --tb=short --verbose --junitxml=results.xml --runs3 tests/amazon_s3/test_s3.py::TestBasicIntegrationWithS3::test_update_image_with_aws_s3
+    else
+        echo "AWS creds are present, but --runs3 flag not passed."
+    fi
+fi
+
+XDIST_ARGS="${XDIST_ARGS:--n ${XDIST_PARALLEL_ARG:-auto}}"
+MAX_FAIL_ARG="--maxfail=1"
+HTML_REPORT="--html=report.html --self-contained-html"
+UPGRADE_TEST_ARG=""
+SPECIFIC_INTEGRATION_TEST_ARG=""
+
+if ! pip2 list |grep -e pytest-xdist >/dev/null 2>&1; then
+    XDIST_ARGS=""
     echo "WARNING: install pytest-xdist for running tests in parallel"
 else
     # run all tests when running in parallel
-    EXTRA_TEST_ARGS="${XDIST_ARGS:--n ${TESTS_IN_PARALLEL:-auto}}"
+    MAX_FAIL_ARG=""
 fi
 
-if ! python3 -m pip show pytest-html >/dev/null; then
+if ! pip2 list|grep -e pytest-html >/dev/null 2>&1; then
     HTML_REPORT=""
     echo "WARNING: install pytest-html for html results report"
 fi
 
-if [[ -n $SPECIFIC_INTEGRATION_TEST ]]; then
-    SPECIFIC_INTEGRATION_TEST_FLAG="-k"
+if [[ -n $UPGRADE_FROM ]]; then
+    UPGRADE_TEST_ARG="--upgrade-from $UPGRADE_FROM"
 fi
 
-python3 -m pytest \
-    $EXTRA_TEST_ARGS \
-    --verbose \
-    --junitxml=results.xml \
-    $HTML_REPORT \
-    "$@" \
-    $SPECIFIC_INTEGRATION_TEST_FLAG "$SPECIFIC_INTEGRATION_TEST"
+if [[ -n $SPECIFIC_INTEGRATION_TEST ]]; then
+    SPECIFIC_INTEGRATION_TEST_ARG="-k $SPECIFIC_INTEGRATION_TEST"
+fi
+
+if [ $# -eq 0 ]; then
+    py.test $XDIST_ARGS $MAX_FAIL_ARG -s --verbose --junitxml=results.xml $HTML_REPORT --runfast --runslow $UPGRADE_TEST_ARG $SPECIFIC_INTEGRATION_TEST_ARG $DEFAULT_TESTS
+    exit $?
+fi
+
+py.test $XDIST_ARGS $MAX_FAIL_ARG -s --verbose --junitxml=results.xml $HTML_REPORT "$@" $DEFAULT_TESTS

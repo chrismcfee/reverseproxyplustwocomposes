@@ -17,7 +17,7 @@ Requirements:
 * docker-compose 1.7
 
 
-![Mender logo](mender_logo.png)
+![Mender logo](https://mender.io/user/pages/04.resources/_logos/logoS.png)
 
 
 ## Getting started
@@ -44,27 +44,33 @@ A provided `docker-compose.yml` file will provision the following set of
 services:
 
 ```
-       |
-  port |        +-----------------------+         +------------------------+
-   443 | <----> |  API Gateway          |    +--->|  Device Authentication |
-       |        |  (mender-api-gateway) |<---|    |  (mender-device-auth)  | <---+
-       |        +-----------------------+    |    +------------------------+     |
-       |                                     +--->|  Inventory             |     |
-       |                                     |    |  (mender-inventory)    | <---+
-       |                                     |    +------------------------+     |     +----------------------------------+
-       |                                     +--->|  User Administration   |     +---> |  Workflows Engine                |
-       |                                     |    |  (mender-useradm)      | <---+     |  (mender-workflows-server)       |
-       |                                     |    +------------------------+     |     |  (mender-workflows-worker)       |
-       |                                     +--->|  Deployments           |     |     |  (mender-create-artifact-worker) |
-       |                 +----------------------->|  (mender-deployments)  | <---+     +----------------------------------+
-       |                 |                        +------------------------+
-       |                 |
-       |                 v
-  port |        +------------------+              +----------+
-  9000 | <----> |  Storage Proxy   |<------------>|  Minio   |
-       |        |  (storage-proxy) |              |  (minio) |
-       |        +------------------+              +----------+
-       |
+        |
+        |
+        |        +-----------------------+           +-------------------------+
+   port |        |                       |           |                         |
+    443 | <----> |  API Gateway          |      +--->|  Device Authentication  |
+        |        |  (mender-api-gateway) |<-----|    |  (mender-device-auth)   |
+        |        +-----------------------+      |    +-------------------------+
+        |                                       +--->|  Inventory              |
+        |                                       |    |  (mender-inventory)     |
+        |                                       |    +-------------------------+
+        |                                       |    |                         |
+        |                                       +--->|  User Administration    |
+        |                                       |    |  (mender-useradm)       |
+        |                                       |    +-------------------------+
+        |                                       +--->|                         |
+        |                                            |  Deployments            |
+        |              +---------------------------->|  (mender-deployments)   |
+        |              |                             +-------------------------+
+        |              |
+        |              |
+        |              v
+        |        +------------------+                 +---------+
+   port |        |                  |                 |         |
+   9000 | <----> |  Storage Proxy   |<--------------->| Minio   |
+        |        |  (storage-proxy) |                 | (minio) |
+        |        +------------------+                 +---------+
+        |
 ```
 
 It is customary to provide deployment specific overrides in a separate compose
@@ -195,17 +201,19 @@ how to modify it.
 
 ### Enabling non-SSL access
 
-For debugging purposes or when using third party SSL reverse proxy, it may be useful to enable non-SSL access.  
-API Gateway configuration enables plain HTTP on port 80 when setting the `SSL` environment variable to `'false'`.  
-The nginx configuration will only be changed on container creation. If you previously ran with SSL, delete and re-create the container.  
-An example compose file can be included like this:
+For debugging purposes, it may be useful to temporarily enable non-SSL access.
+API Gateway configuration enables plain HTTP on port 80, however the port is not
+published by default, thus it remains inaccessible from the outside. For
+convenience, an overlay compose file is provided that publishes port 80 of API
+Gateway to port 8090 on current host. The overlay file has to be explicitly
+included when setting up the environment like this:
 
 ```
-./demo -f docker-compose.no-ssl.yml up
+docker-compose ... -f docker-compose.no-ssl.yml ...
 ```
 
 **NOTE** make sure that plain HTTP port is not published in production
-deployment. Use a reverse proxy for example.
+deployment.
 
 ## Demo client
 
@@ -243,17 +251,9 @@ issue. We thank you in advance for your cooperation.
 
 ## Connect with us
 
-* Join the [Mender Hub discussion forum](https://hub.mender.io)
-* Follow us on [Twitter](https://twitter.com/mender_io). Please
+* Join our [Google
+  group](https://groups.google.com/a/lists.mender.io/forum/#!forum/mender)
+* Follow us on [Twitter](https://twitter.com/mender_io?target=_blank). Please
   feel free to tweet us questions.
 * Fork us on [Github](https://github.com/mendersoftware)
-* Create an issue in the [bugtracker](https://tracker.mender.io/projects/MEN)
 * Email us at [contact@mender.io](mailto:contact@mender.io)
-* Connect to the [#mender IRC channel on Freenode](http://webchat.freenode.net/?channels=mender)
-
-## Authors
-
-Mender was created by the team at [Northern.tech AS](https://northern.tech), with many contributions from
-the community. Thanks [everyone](https://github.com/mendersoftware/mender/graphs/contributors)!
-
-[Mender](https://mender.io) is sponsored by [Northern.tech AS](https://northern.tech).

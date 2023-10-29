@@ -1,4 +1,5 @@
-# Copyright 2020 Northern.tech AS
+#!/usr/bin/python
+# Copyright 2017 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -11,217 +12,254 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-
 import pytest
-from . import conftest
+from MenderAPI import auth, adm, reset_mender_api
+from common import *
+from common_docker import *
+import conftest
+import time
+import socket
 
-from .MenderAPI import auth, auth_v2, reset_mender_api
-from .helpers import Helpers
+def wait_for_containers(expected_containers, defined_in):
+    for _ in range(60 * 5):
+        out = subprocess.check_output("docker-compose -p %s %s ps -q" % (conftest.docker_compose_instance, "-f " + " -f ".join(defined_in)), shell=True)
+        if len(out.split()) == expected_containers:
+            time.sleep(60)
+            return
+        else:
+            time.sleep(1)
 
-from testutils.infra.device import MenderDevice, MenderDeviceGroup
-from testutils.infra.container_manager import factory
-
-container_factory = factory.get_factory()
-
+    pytest.fail("timeout: %d containers not running for docker-compose project: %s" % (expected_containers, conftest.docker_compose_instance))
 
 @pytest.fixture(scope="function")
 def standard_setup_one_client(request):
-    env = container_factory.getStandardSetup(num_clients=1)
-    request.addfinalizer(env.teardown)
+    restart_docker_compose()
+    reset_mender_api()
 
-    env.setup()
-
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
-
-    return env
+    set_setup_type(ST_OneClient)
 
 
-@pytest.fixture(scope="function")
-def standard_setup_one_client_bootstrapped(request):
-    env = container_factory.getStandardSetup(num_clients=1)
-    request.addfinalizer(env.teardown)
+def setup_set_client_number_bootstrapped(clients):
+    docker_compose_cmd("scale mender-client=%d" % clients)
+    ssh_is_opened()
 
-    env.setup()
+    auth.reset_auth_token()
+    adm.accept_devices(clients)
 
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
-    auth_v2.accept_devices(1)
-
-    return env
+    set_setup_type(None)
 
 
 @pytest.fixture(scope="function")
-def standard_setup_one_rofs_client_bootstrapped(request):
-    env = container_factory.getRofsClientSetup()
-    request.addfinalizer(env.teardown)
+def standard_setup_one_client_bootstrapped():
+    restart_docker_compose()
+    reset_mender_api()
+    adm.accept_devices(1)
 
-    env.setup()
-
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
-    auth_v2.accept_devices(1)
-
-    return env
+    set_setup_type(ST_OneClientBootstrapped)
 
 
 @pytest.fixture(scope="function")
-def standard_setup_one_docker_client_bootstrapped(request):
-    env = container_factory.getDockerClientSetup()
-    request.addfinalizer(env.teardown)
+def standard_setup_two_clients_bootstrapped():
+    restart_docker_compose(2)
+    reset_mender_api()
+    adm.accept_devices(2)
 
-    env.setup()
+    set_setup_type(ST_TwoClientsBootstrapped)
 
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
+@pytest.fixture(scope="function")
+def standard_setup_one_client_bootstrapped_with_s3():
+    stop_docker_compose()
+    reset_mender_api()
 
-    reset_mender_api(env)
-    auth_v2.accept_devices(1)
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.client.yml \
+                        -f ../docker-compose.testing.yml \
+                        -f ../docker-compose.storage.minio.yml \
+                        -f ../docker-compose.storage.s3.yml up -d",
+                        use_common_files=False)
 
-    return env
+    docker_compose_cmd("logs -f &")
+    ssh_is_opened()
+
+    auth.reset_auth_token()
+    adm.accept_devices(1)
+
+    set_setup_type(ST_OneClientsBootstrapped_AWS_S3)
 
 
 @pytest.fixture(scope="function")
-def standard_setup_two_clients_bootstrapped(request):
-    env = container_factory.getStandardSetup(num_clients=2)
-    request.addfinalizer(env.teardown)
+def standard_setup_without_client():
+    stop_docker_compose()
+    reset_mender_api()
 
-    env.setup()
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.storage.minio.yml \
+                        -f ../docker-compose.testing.yml up -d",
+                        use_common_files=False)
 
-    env.device_group = MenderDeviceGroup(env.get_mender_clients())
-    env.device_group.ssh_is_opened()
-
-    reset_mender_api(env)
-    auth_v2.accept_devices(2)
-
-    return env
-
-
-@pytest.fixture(scope="function")
-def standard_setup_without_client(request):
-    env = container_factory.getStandardSetup(num_clients=0)
-    request.addfinalizer(env.teardown)
-
-    env.setup()
-    reset_mender_api(env)
-
-    return env
-
-
-@pytest.fixture(scope="function")
-def setup_with_legacy_client(request):
-    # The legacy 1.7.0 client was only built for qemux86-64, so skip tests using
-    # it when running other platforms.
-    if conftest.machine_name != "qemux86-64":
-        pytest.skip(
-            "Test only works with qemux86-64, and this is %s" % conftest.machine_name
-        )
-
-    env = container_factory.getLegacyClientSetup()
-    request.addfinalizer(env.teardown)
-
-    env.setup()
-
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
-    auth_v2.accept_devices(1)
-
-    return env
+    set_setup_type(ST_NoClient)
 
 
 @pytest.fixture(scope="function")
 def standard_setup_with_signed_artifact_client(request):
-    env = container_factory.getSignedArtifactClientSetup()
-    request.addfinalizer(env.teardown)
+    stop_docker_compose()
+    reset_mender_api()
 
-    env.setup()
+    docker_compose_cmd("-f ../extra/signed-artifact-client-testing/docker-compose.signed-client.yml up -d")
 
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
+    ssh_is_opened()
     auth.reset_auth_token()
-    auth_v2.accept_devices(1)
-
-    return env
+    adm.accept_devices(1)
+    set_setup_type(ST_SignedClient)
 
 
 @pytest.fixture(scope="function")
-def standard_setup_with_short_lived_token(request):
-    env = container_factory.getShortLivedTokenSetup()
-    request.addfinalizer(env.teardown)
+def standard_setup_with_short_lived_token():
+    stop_docker_compose()
+    reset_mender_api()
 
-    env.setup()
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.client.yml \
+                        -f ../docker-compose.storage.minio.yml  \
+                        -f ../docker-compose.testing.yml \
+                        -f ../extra/expired-token-testing/docker-compose.short-token.yml up -d",
+                        use_common_files=False)
 
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
-    reset_mender_api(env)
+    ssh_is_opened()
     auth.reset_auth_token()
-    auth_v2.accept_devices(1)
-
-    return env
-
+    adm.accept_devices(1)
+    set_setup_type(ST_ShortLivedAuthToken)
 
 @pytest.fixture(scope="function")
-def setup_failover(request):
-    env = container_factory.getFailoverServerSetup()
-    request.addfinalizer(env.teardown)
+def setup_failover():
+    """
+    Setup with two servers and one client.
+    First server (A) behaves as usual, whereas the second server (B) should
+    not expect any clients. Client is initially set up against server A.
+    In docker all microservices for B has a suffix "-2"
+    """
+    stop_docker_compose()
+    reset_mender_api()
 
-    env.setup()
-    reset_mender_api(env)
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.client.yml \
+                        -f ../docker-compose.storage.minio.yml  \
+                        -f ../docker-compose.testing.yml \
+                        -f ../extra/failover-testing/docker-compose.failover-server.yml up -d",
+                        use_common_files=False)
 
-    env.device = MenderDevice(env.get_mender_clients()[0])
-    env.device.ssh_is_opened()
-
+    ssh_is_opened()
     auth.reset_auth_token()
-    auth_v2.accept_devices(1)
-
-    return env
-
+    adm.accept_devices(1)
+    set_setup_type(ST_Failover)
 
 @pytest.fixture(scope="function")
 def running_custom_production_setup(request):
     conftest.production_setup_lock.acquire()
 
-    env = container_factory.getCustomSetup()
+    stop_docker_compose()
+    reset_mender_api()
 
     def fin():
-        env.teardown()
         conftest.production_setup_lock.release()
+        stop_docker_compose()
 
     request.addfinalizer(fin)
 
-    reset_mender_api(env)
-
-    return env
+    set_setup_type(ST_CustomSetup)
 
 
 @pytest.fixture(scope="function")
-def enterprise_no_client(request):
-    env = container_factory.getEnterpriseSetup(num_clients=0)
-    request.addfinalizer(env.teardown)
+def multitenancy_setup_without_client(request):
+    if not conftest.run_tenant_tests:
+        pytest.skip("Tenant tests disabled")
 
-    env.setup()
-    reset_mender_api(env)
+    stop_docker_compose()
+    reset_mender_api()
 
-    return env
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.storage.minio.yml \
+                        -f ../docker-compose.testing.yml \
+                        -f ../docker-compose.tenant.yml \
+                        %s up -d" % (conftest.mt_docker_compose_file),
+                        use_common_files=False)
+
+    # wait a bit for the backend to start
+    wait_for_containers(15, ["../docker-compose.yml",
+                             "../docker-compose.tenant.yml",
+                             "../docker-compose.storage.minio.yml"])
+
+    def fin():
+        stop_docker_compose()
+
+    request.addfinalizer(fin)
+    set_setup_type(ST_MultiTenancyNoClient)
 
 
 @pytest.fixture(scope="function")
-def enterprise_no_client_smtp(request):
-    env = container_factory.getEnterpriseSMTPSetup()
-    request.addfinalizer(env.teardown)
+def standard_setup_one_client_bootstrapped_with_s3_and_mt(request):
+    if not conftest.run_tenant_tests:
+        pytest.skip("Tenant tests disabled")
 
-    env.setup()
-    reset_mender_api(env)
+    stop_docker_compose()
+    reset_mender_api()
 
-    return env
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.testing.yml \
+                        -f ../docker-compose.storage.minio.yml \
+                        -f ../docker-compose.storage.s3.yml \
+                        -f ../docker-compose.tenant.yml \
+                        %s up -d" % (conftest.mt_docker_compose_file),
+                        use_common_files=False)
+
+
+    wait_for_containers(15, ["../docker-compose.yml",
+                             "../docker-compose.testing.yml ",
+                             "../docker-compose.tenant.yml",
+                             "../docker-compose.storage.minio.yml",
+                             "../docker-compose.storage.s3.yml"])
+
+    def fin():
+        stop_docker_compose()
+
+    request.addfinalizer(fin)
+    set_setup_type(ST_OneClientsBootstrapped_AWS_S3_MT)
+
+@pytest.fixture(scope="function")
+def multitenancy_setup_without_client_with_smtp(request):
+    if not conftest.run_tenant_tests:
+        pytest.skip("Tenant tests disabled")
+
+    stop_docker_compose()
+    reset_mender_api()
+
+    host_ip = get_host_ip()
+
+    docker_compose_cmd("-f ../docker-compose.yml \
+                        -f ../docker-compose.storage.minio.yml \
+                        -f ../docker-compose.testing.yml \
+                        -f ../docker-compose.tenant.yml \
+                        %s \
+                        -f ../extra/smtp-testing/conductor-workers-smtp-test.yml \
+                        -f ../extra/recaptcha-testing/tenantadm-test-recaptcha-conf.yml \
+                        up -d"  % (conftest.mt_docker_compose_file),
+                       use_common_files=False, env={"HOST_IP": host_ip})
+
+    # wait a bit for the backend to start
+    wait_for_containers(15, ["../docker-compose.yml",
+                             "../docker-compose.tenant.yml",
+                             "../docker-compose.storage.minio.yml"])
+
+    def fin():
+        stop_docker_compose()
+
+    request.addfinalizer(fin)
+    set_setup_type(ST_MultiTenancyNoClientWithSmtp)
+
+
+def get_host_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    host_ip = s.getsockname()[0]
+    s.close()
+    return host_ip

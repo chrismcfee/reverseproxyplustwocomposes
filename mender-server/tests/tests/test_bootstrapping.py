@@ -1,4 +1,5 @@
-# Copyright 2020 Northern.tech AS
+#!/usr/bin/python
+# Copyright 2017 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,84 +13,69 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import time
-
+from fabric.api import *
 import pytest
+import time
+from common import *
+from common_docker import *
+from common_setup import *
+from helpers import Helpers
+from MenderAPI import auth, adm, deploy, image, logger
+from common_update import common_update_procedure
+from mendertesting import MenderTesting
 
-from .. import conftest
-from ..common_setup import (
-    standard_setup_one_client,
-    standard_setup_one_client_bootstrapped,
-)
-from .common_update import common_update_procedure
-from ..MenderAPI import auth_v2, logger
-from .mendertesting import MenderTesting
 
 
 class TestBootstrapping(MenderTesting):
-    MENDER_STORE = "/data/mender/mender-store"
+    slow = pytest.mark.skipif(not pytest.config.getoption("--runslow"),
+                              reason="need --runslow option to run")
 
     @MenderTesting.fast
-    def test_bootstrap(self, standard_setup_one_client):
+    @pytest.mark.usefixtures("standard_setup_one_client")
+    def test_bootstrap(self):
         """Simply make sure we are able to bootstrap a device"""
 
-        mender_device = standard_setup_one_client.device
+        execute(self.accept_devices, hosts=get_mender_clients())
 
-        auth_v2.check_expected_status("pending", 1)
+
+    def accept_devices(self):
+        adm.check_expected_status("pending", len(get_mender_clients()))
 
         # iterate over devices and accept them
-        for d in auth_v2.get_devices():
-            auth_v2.set_device_auth_set_status(
-                d["id"], d["auth_sets"][0]["id"], "accepted"
-            )
-            logger.info("Accepting DeviceID: %s" % d["id"])
+        for d in adm.get_devices():
+            adm.set_device_status(d["id"], "accepted")
+            logging.info("Accepting DeviceID: %s" % d["id"])
 
         # make sure all devices are accepted
-        auth_v2.check_expected_status("accepted", 1)
+        adm.check_expected_status("accepted", len(get_mender_clients()))
 
-        # make sure mender-store contains authtoken after sometime, else fail test
-        HAVE_TOKEN_TIMEOUT = 60 * 5
-        sleepsec = 0
-        while sleepsec < HAVE_TOKEN_TIMEOUT:
-            try:
-                mender_device.run(
-                    "strings {} | grep authtoken".format(self.MENDER_STORE)
-                )
-                return
-            except Exception:
-                sleepsec += 5
-                time.sleep(5)
-                logger.info("waiting for mender-store file, sleepsec: %d" % sleepsec)
-
-        assert sleepsec <= HAVE_TOKEN_TIMEOUT, "timeout for mender-store file exceeded"
+        # make sure mender-store contains authtoken
+        have_token()
 
         # print all device ids
-        for device in auth_v2.get_devices_status("accepted"):
-            logger.info("Accepted DeviceID: %s" % device["id"])
+        for device in adm.get_devices_status("accepted"):
+            logging.info("Accepted DeviceID: %s" % device["id"])
 
     @MenderTesting.slow
-    def test_reject_bootstrap(
-        self, standard_setup_one_client_bootstrapped, valid_image
-    ):
+    @pytest.mark.usefixtures("standard_setup_one_client_bootstrapped")
+    def test_reject_bootstrap(self):
         """Make sure a rejected device does not perform an upgrade, and that it gets it's auth token removed"""
-
-        mender_device = standard_setup_one_client_bootstrapped.device
+        if not env.host_string:
+            execute(self.test_reject_bootstrap, hosts=get_mender_clients())
+            return
 
         # iterate over devices and reject them
-        for device in auth_v2.get_devices():
-            auth_v2.set_device_auth_set_status(
-                device["id"], device["auth_sets"][0]["id"], "rejected"
-            )
-            logger.info("Rejecting DeviceID: %s" % device["id"])
+        for device in adm.get_devices():
+            adm.set_device_status(device["id"], "rejected")
+            logging.info("Rejecting DeviceID: %s" % device["id"])
 
-        auth_v2.check_expected_status("rejected", 1)
+        adm.check_expected_status("rejected", len(get_mender_clients()))
 
-        host_ip = standard_setup_one_client_bootstrapped.get_virtual_network_host_ip()
-        with mender_device.get_reboot_detector(host_ip) as reboot:
+        with Helpers.RebootDetector() as reboot:
             try:
-                common_update_procedure(install_image=valid_image)
+                deployment_id, _ = common_update_procedure(install_image=conftest.get_valid_image())
             except AssertionError:
-                logger.info("Failed to deploy upgrade to rejected device.")
+                logging.info("Failed to deploy upgrade to rejected device.")
                 reboot.verify_reboot_not_performed()
 
             else:
@@ -97,11 +83,19 @@ class TestBootstrapping(MenderTesting):
                 pytest.fail("no error while trying to deploy to rejected device")
                 return
 
-        # Check from client side
-        mender_device.run(
-            "journalctl -u %s -l -n 3 | grep -q 'authentication request rejected'"
-            % mender_device.get_client_service_name()
-        )
+        finished = False
+        # wait until auththoken is removed from file
+        for _ in range(10):
+            with settings(abort_exception=Exception):
+                try:
+                    run("journalctl -u mender -l -n 3 | grep -q 'authentication request rejected'")
+                except:
+                    time.sleep(30)
+                else:
+                    finished = True
+                    break
 
-        # Check that we can accept again the device from the server
-        auth_v2.accept_devices(1)
+        adm.accept_devices(1)
+
+        if not finished:
+            pytest.fail("failed to remove authtoken from mender-store file")

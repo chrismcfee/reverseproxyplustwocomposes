@@ -5,122 +5,77 @@ HERE=$(dirname $(readlink -f "$0"))
 INTEGRATION_PATH=$(dirname "$HERE")
 export INTEGRATION_PATH
 
-DOWNLOAD_REQUIREMENTS="true"
+COMPOSE_CMD="docker-compose -p backend-tests \
+             -f $INTEGRATION_PATH/docker-compose.yml \
+             -f $INTEGRATION_PATH/docker-compose.demo.yml \
+             -f $INTEGRATION_PATH/backend-tests/docker/docker-compose.backend-tests.yml"
 
-COMPOSE_CMD_OPEN="docker-compose -p backend-tests \
-        -f $INTEGRATION_PATH/docker-compose.yml \
-        -f $INTEGRATION_PATH/docker-compose.demo.yml \
-        -f $INTEGRATION_PATH/backend-tests/docker/docker-compose.backend-tests.yml \
-        -f $INTEGRATION_PATH/docker-compose.storage.minio.yml
-        "
-COMPOSE_CMD_ENTERPRISE="${COMPOSE_CMD_OPEN} -f $INTEGRATION_PATH/docker-compose.enterprise.yml \
-        -f $INTEGRATION_PATH/extra/recaptcha-testing/tenantadm-test-recaptcha-conf.yml \
-        -f $INTEGRATION_PATH/extra/smtp-testing/conductor-workers-smtp-test.yml \
-        -f $INTEGRATION_PATH/extra/stripe-testing/stripe-test.docker-compose.yml
-        "
-COMPOSE_CMD=""
-
-PYTEST_FILTER_OPEN="not Enterprise and not Multitenant"
-PYTEST_FILTER_ENTERPRISE="Enterprise"
-PYTEST_FILTER=""
-
-PYTEST_REPORT_OPEN="--self-contained-html \
-        --junit-xml=results_backend_integration_open.xml \
-        --html=report_backend_integration_open.html"
-PYTEST_REPORT_ENTERPRISE="--self-contained-html \
-        --junit-xml=results_backend_integration_enterprise.xml \
-        --html=report_backend_integration_enterprise.html"
-PYTEST_REPORT=""
-
-TOOLS="$INTEGRATION_PATH/backend-tests/downloaded-tools"
+# by default just add minio, with COMPOSE_CMD_BASE this creates the standard onprem ST setup
+COMPOSE_FILES_DEFAULT=( "$INTEGRATION_PATH/docker-compose.storage.minio.yml" )
+COMPOSE_FILES=()
 
 usage() {
     echo "runner script for backend-specific integration tests"
     echo ""
     echo "./backend-tests"
     echo -e "\t-h --help"
-    echo -e "\t-s --suite <SUITE>\trun specific test suite"
-    echo -e "\t                  \t<SUITE> can be 'open' (default), 'enterprise', 'all'"
-    echo -e "\t--no-download     \tdo not download the external dependencies"
     echo -e "\t-c --skip-cleanup \tleave containers running after tests"
+    echo -e "\t-f=<FILE>         \tspecify custom compose file(s); default files will not be used,"
+    echo -e "\t                  \tmake sure to specify all files you need"
     echo -e "\t other args will be passed to the testing container's py.test command"
     echo ""
     echo -e "examples:"
-    echo -e "run default ST setup:"
+    echo -e "run all tests, default ST setup:"
     echo -e "\t./run"
-    echo -e "run tests Enterprise tests"
-    echo -e "\t./run -s enterprise"
-    echo -e "run specific test TestGetDevices in both setups"
-    echo -e "\t./run -s all -k TestGetDevices"
+    echo -e "run tests matching expression 'multitenant'"
+    echo -e "\t./run -k multitenant"
 }
 
-TEST_SUITES=( "open" )
 parse_args(){
+    whitespace="[[:space:]]"
+
+    # FIXME args must be passed in the form -f=<path>; spaces don't workalthough they're standard...
     while [ $# -gt 0 ]; do
-        case "$1" in
+        PARAM=`echo $1 | awk -F= '{print $1}'`
+        VALUE=`echo $1 | awk -F= '{print $2}'`
+        case $PARAM in
             -h | --help)
-                usage
-                exit
-                ;;
-            -s | --suite)
-                shift 1
-                case "$1" in
-                    open)
-                        ;;
-                    enterprise)
-                        TEST_SUITES=( "enterprise" )
-                        ;;
-                    all)
-                        TEST_SUITES=( "open" "enterprise" )
-                        ;;
-                    *)
-                        usage
-                        exit
-                        ;;
-                esac
-                ;;
-            -f | -f=*)
-                usage
-                exit 1
-                ;;
-            --no-download)
-                DOWNLOAD_REQUIREMENTS=""
-                ;;
+            usage
+            exit
+            ;;
             -c | --skip-cleanup)
-                SKIP_CLEANUP=1
-                ;;
+            SKIP_CLEANUP=1
+            ;;
+            -f)
+            COMPOSE_FILES+=( $VALUE )
+            ;;
             *)
-                USER_PYTEST_ARGS="$USER_PYTEST_ARGS $1"
-                ;;
         esac
         shift 1
+    done
+
+    make_compose_cmd
+}
+
+make_compose_cmd () {
+    if [ ${#COMPOSE_FILES[@]} -eq 0 ]
+    then
+        COMPOSE_FILES=$COMPOSE_FILES_DEFAULT
+    fi
+
+    for var in "${COMPOSE_FILES[@]}"
+    do
+        COMPOSE_CMD+=" -f ${var}"
     done
 }
 
 build_backend_tests_runner() {
-    mkdir -p "$TOOLS"
-
-    if [[ -n "$DOWNLOAD_REQUIREMENTS" ]]; then
-        get_runner_requirements
-    fi
-
     docker build -t mender-backend-tests-runner -f $INTEGRATION_PATH/backend-tests/docker/Dockerfile $INTEGRATION_PATH/backend-tests
-}
-
-get_runner_requirements() {
-    MENDER_ARTIFACT_BRANCH=$($INTEGRATION_PATH/extra/release_tool.py --version-of mender-artifact)
-    echo "downloading mender-artifact/$MENDER_ARTIFACT_BRANCH"
-
-    curl --fail "https://d1b0l86ne08fsf.cloudfront.net/mender-artifact/${MENDER_ARTIFACT_BRANCH}/linux/mender-artifact" \
-         -o "$TOOLS/mender-artifact"
-
-    chmod +x "$TOOLS/mender-artifact"
 }
 
 run_tests() {
     $COMPOSE_CMD up -d
 
-    cid=""
     declare retries=5
     while [[ $retries -gt 0 && -z $cid ]]; do
         cid=$(get_container_id mender-backend-tests-runner)
@@ -133,12 +88,10 @@ run_tests() {
         return 1
     fi
 
-    run_tests_failed=""
-    docker attach $cid || run_tests_failed=1
-    rc=$(get_container_exit_code $cid)
-    if [ "$run_tests_failed" != "1" ] && [ "$rc" != "0" ]; then
-        run_tests_failed=$rc
-    fi
+    docker attach $cid || failed=1
+
+    get_container_exit_code $cid || true
+    [ $? == 0 ] || failed=1
 }
 
 get_container_id() {
@@ -146,96 +99,23 @@ get_container_id() {
 }
 
 get_container_exit_code() {
-    echo "$(docker inspect --format '{{.State.ExitCode}}' $1 || echo 1)"
-}
-
-copy_test_reports_if_args() {
-    while [ -n "$1" ]; do
-        case "$1" in
-            --junit-xml=*)
-                RESULTS_FILE="${1#--junit-xml=}"
-                ;;
-            --junit-xml)
-                shift
-                RESULTS_FILE="$1"
-                ;;
-            --html=*)
-                REPORT_FILE="${1#--html=}"
-                ;;
-            --html)
-                shift
-                REPORT_FILE="$1"
-                ;;
-        esac
-        shift
-    done
-
-    if [ -n "$RESULTS_FILE" ]; then
-        echo "-- copying file $RESULTS_FILE"
-        docker cp ${cid}:/$RESULTS_FILE . || true
-    fi
-    if [ -n "$REPORT_FILE" ]; then
-        echo "-- copying file $REPORT_FILE"
-        docker cp ${cid}:/$REPORT_FILE . || true
-    fi
-}
-
-prepare_pytest_args() {
-    PYTEST_ARGS=""
-    filter="none"
-    for val in $USER_PYTEST_ARGS; do
-        if [ "$val" == "-k" ]; then
-            filter="next"
-        elif [ "$filter" == "next" ]; then
-            PYTEST_FILTER="$PYTEST_FILTER and $val"
-            filter="done"
-        else
-            PYTEST_ARGS="$PYTEST_ARGS $val"
-        fi
-    done
-
-    echo "-- using PYTEST_FILTER=$PYTEST_FILTER"
-    PYTEST_ARGS="$PYTEST_ARGS -k '$PYTEST_FILTER' $PYTEST_REPORT"
-
-    export PYTEST_ARGS
+    docker inspect --format '{{.State.ExitCode}}' $1
 }
 
 cleanup(){
-    [ -z $SKIP_CLEANUP ] && $COMPOSE_CMD down -v --remove-orphans && $COMPOSE_CMD rm || true
+    [ -z $SKIP_CLEANUP ] && $COMPOSE_CMD down && $COMPOSE_CMD rm || true
 }
 
 parse_args "$@"
 build_backend_tests_runner
+run_tests
 
+if [ -n "$failed" ]; then
+    tmppath=$(mktemp /tmp/acceptance.XXXXXX)
+    echo "-- tests failed, dumping logs to $tmppath"
+    $COMPOSE_CMD logs > $tmppath
+fi
 
-for suite in "${TEST_SUITES[@]}"; do
-    case "$suite" in
-        open)
-            COMPOSE_CMD="$COMPOSE_CMD_OPEN"
-            PYTEST_FILTER="$PYTEST_FILTER_OPEN"
-            PYTEST_REPORT="$PYTEST_REPORT_OPEN"
-            ;;
-        enterprise)
-            COMPOSE_CMD="$COMPOSE_CMD_ENTERPRISE"
-            PYTEST_FILTER="$PYTEST_FILTER_ENTERPRISE"
-            PYTEST_REPORT="$PYTEST_REPORT_ENTERPRISE"
-            ;;
-    esac
+cleanup
 
-    prepare_pytest_args
-    run_tests
-
-    if [ "$run_tests_failed" != "" ]; then
-        script_failed=$run_tests_failed
-        tmppath=$(mktemp ${HERE}/acceptance.XXXXXX)
-        echo "-- tests failed, dumping logs to $tmppath"
-        $COMPOSE_CMD logs > $tmppath
-    fi
-
-    copy_test_reports_if_args $PYTEST_REPORT
-
-    cleanup
-
-done
-
-exit $script_failed
+exit $failed

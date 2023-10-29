@@ -1,9 +1,12 @@
-version: '2.1'
+version: '2'
 services:
 
-    mender-workflows-worker:
+    mender-email-sender:
         environment:
-            - WORKFLOWS_SMTP_HOST=mender-backend-tests-runner:4444
+            - CONDUCTOR=http://mender-conductor:8080
+            - SMTP_ADDRESS=${HOST_IP}:4444
+            - EMAIL_SENDER=The Mender Team <contact@mender.io>
+            - DEMO=false
 
 networks:
     mender:
