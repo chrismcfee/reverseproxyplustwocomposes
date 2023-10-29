@@ -1,9 +1,14 @@
 version: '3'
 
+networks:
+  traefik:
+
 services:
   nginx:
     image: nginx:latest
     container_name: nginx_container
+    environment:
+      - NGINX_HOST=nginx.docker.localhost
     hostname: nginx
     ports:
       - "443:443"
@@ -14,4 +19,15 @@ services:
       - ./nginx-selfsigned.key:/etc/nginx/ssl/nginx-selfsigned.key:ro
       - ./nginx-meshcentral-service.conf:/etc/nginx/conf.d/sites-available/mesh.conf
       - ./nginx-mender-service.conf:/etc/nginx/conf.d/sites-available/mender.conf
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.nginx.rule=HostRegexp('{domain:.+)')"
+      - "traefik.http.routers.nginx.priority=1"
+      - "traefik.http.routers.nginx.service=nginx"
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
+    networks:
+      - traefik
+
 
