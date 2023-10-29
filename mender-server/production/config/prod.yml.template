@@ -61,7 +61,7 @@ services:
     mender-api-gateway:
         ports:
             # list of ports API gateway is made available on
-            - "443:443"
+            - "8083:8083"
         networks:
             mender:
                 aliases:
@@ -75,10 +75,10 @@ services:
                     - set-my-alias-here.com
         command:
             - --accesslog=true
-            - --entrypoints.http.address=:80
+            - --entrypoints.http.address=:8082
             - --entrypoints.http.http.redirections.entryPoint.scheme=https
             - --entrypoints.http.http.redirections.entryPoint.to=https
-            - --entrypoints.https.address=:443
+            - --entrypoints.https.address=:8083
             - --entryPoints.https.transport.respondingTimeouts.idleTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.readTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.writeTimeout=7200

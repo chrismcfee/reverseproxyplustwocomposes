@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mender-ingress
+  annotations:
+    cert-manager.io/issuer: "letsencrypt"
+spec:
+  tls:
+  - hosts:
+    - mender.linodeproofofconcept.sobe.name
+    secretName: mender-ingress-tls
+  rules:
+  - host: "mender.linodeproofofconcept.sobe.name"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mender-api-gateway
+            port:
+              number: 80

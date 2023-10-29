@@ -61,17 +61,17 @@ services:
         # Enables the web UI and tells Traefik to listen to docker
         command:
             - --accesslog=true
-            - --entrypoints.http.address=:80
+            - --entrypoints.http.address=:8082
             - --entrypoints.http.http.redirections.entryPoint.scheme=https
             - --entrypoints.http.http.redirections.entryPoint.to=https
-            - --entrypoints.https.address=:443
+            - --entrypoints.https.address=:8083
             - --entryPoints.https.transport.respondingTimeouts.idleTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.readTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.writeTimeout=7200
             - --providers.file.directory=/etc/traefik/config
             - --providers.docker
-            - --entryPoints.web.address=:80
-            - --entryPoints.websecure.address=:443
+            - --entryPoints.web.address=:8082
+            - --entryPoints.websecure.address=:8083
             - --entryPoints.web.forwardedHeaders.insecure
             - --api.dashboard=true
             - --log.level=DEBUG
@@ -86,12 +86,8 @@ services:
             - "traefik.http.routers.api.entrypoints=web"
             - "traefik.http.routers.api.rule=Host(`traefik.docker.localhost`)"
             - "traefik.http.routers.api.service=api@internal"
-        ports:
-          - "8082":"80"
-          - "8082":"443"
         networks:
             - mender
-            - traefik
         # critical - otherwise nginx may not detect
         # these servers and exits with 'upstream server not found'
         depends_on:
@@ -99,6 +95,9 @@ services:
             - mender-gui
             - mender-useradm
             - mender-inventory
+        ports:
+            - 8082:8082
+            - 8083:8083
 
     #
     # mender-device-auth

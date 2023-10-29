@@ -182,8 +182,8 @@ env_setup() {
         MENDER_SERVER_URI="http://localhost"
     fi
 
-    USER='mender-demo@example.com'
-    PASSWORD=$(hexdump -n 8 -e '"%X"' < /dev/urandom | cut -c1-12)
+    USER='chris@zignage.com'
+    PASSWORD="Z1gnage12345"
 }
 
 run_non_up_commands() {
