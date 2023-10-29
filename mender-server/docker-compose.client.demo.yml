@@ -1,0 +1,9 @@
+version: '2.3'
+services:
+
+    #
+    # mender-client
+    #
+    mender-client:
+        ports:
+            - "85:85"
