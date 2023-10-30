@@ -1,0 +1,174 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+    cat <<EOF
+$0 --base-dir=<DIR_WITH_REPOS> [options] <REV-RANGE> [addition git-log arguments]
+
+Main options:
+
+--base-dir=<DIR_WITH_REPOS>
+	Supplies the folder where all the Mender repositories live.
+--repo	Query only the repository we're in, not the default Mender release
+	repositories.
+
+Extra options:
+
+-n	Instead of generating the statistics, look at the raw Git output that is
+	given to gitdm. You probably want to pipe this somewhere.
+EOF
+}
+
+if [ -z "$1" ]; then
+    usage
+    exit 1
+fi
+
+while [ -n "$1" ]; do
+    case "$1" in
+        --base-dir=*)
+            BASE_DIR="${1#--base-dir=}"
+            ;;
+        --base-dir)
+            shift
+            BASE_DIR="$1"
+            ;;
+        --repo)
+            REPO_ONLY=1
+            ;;
+        -n)
+            DRY_RUN=1
+            ;;
+        -h|--h*)
+            usage
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+    shift
+done
+
+if [ -z "$BASE_DIR" -a "$REPO_ONLY" != 1 ]; then
+    echo "Need either --base-dir or --repo parameter."
+    exit 1
+fi
+
+collect_changes() {
+    RELEASE_TOOL="$(dirname "$0")/release_tool.py"
+    if [ "$REPO_ONLY" = 1 ]; then
+        REPO_LIST=.
+    else
+        # Sorting is important because we need "*-enterprise" repositories to
+        # come after their Open Source counterparts (see below).
+        REPO_LIST="$("$RELEASE_TOOL" --list git --in-integration-version $1 --only-backend | sort)"
+        REPO_LIST="$REPO_LIST integration"
+    fi
+
+    declare -A os_commits
+
+    local given_range="$1"
+    # Everything after is Git options, if any.
+    shift
+
+    for repo in $REPO_LIST; do
+        if [ "$REPO_ONLY" = 1 ]; then
+            CHANGES="$given_range"
+            pushd .
+        else
+            CHANGES="$("$RELEASE_TOOL" --version-of $repo --in-integration-version "$given_range")"
+            if [ -z "$CHANGES" ]; then
+                continue
+            fi
+            pushd "$BASE_DIR/$repo"
+            case "$repo" in
+                *-enterprise)
+                    # Use the information from the Open Source repository we
+                    # encountered earlier (see both next comment and also
+                    # sorting above).
+                    CHANGES="$CHANGES ^${os_commits[${repo%-enterprise}]}"
+                    ;;
+                *)
+                    # Save the topmost commit of current range. This will be
+                    # used later when encountering an Enterprise repository, to
+                    # exclude the commits from there, so that the code is not
+                    # counted twice.
+                    os_commits[$repo]="$(git rev-list -n 1 $(sed -e 's/.*\.\.//' <<<$CHANGES))"
+                    ;;
+            esac
+        fi
+        if [ -z "$1" ]; then
+            GIT_ARGS="-p -M -C -C --no-merges"
+        else
+            GIT_ARGS=
+        fi
+        echo "Fetching changes for $repo, rev $CHANGES" 1>&2
+        git --no-pager log --perl-regexp --author='^((?!dependabot|mender-test-bot).*)$' --use-mailmap $GIT_ARGS $CHANGES "$@" -- '*' ':!vendor' ':!node_modules' ':!package-lock.json' ':!**/__snapshots__/**'
+        popd
+    done
+}
+
+post_process() {
+    sed -nre '
+:start
+# If empty line.
+/^$/{
+  # Read next line.
+  s/$/\n/
+  N
+
+  # This is a new table, add table header.
+  s/\n([^\n]*)$/| \1 | |/
+
+  # Add table separator.
+  s/$/\n|---|---|/
+
+  # Store result for now (do not print yet).
+  x
+
+  # Read next line.
+  n
+
+  # If empty, omit the whole section and start over (empty category).
+  /^$/{
+    b start
+  }
+
+  # Else recover stored result, print it, and then continue.
+  x
+  p
+  x
+}
+/%/{
+  s/^(.+)/| \1/
+  s/(.+)$/\1 |/
+  s/ {2,}/ | /
+}
+p
+
+'
+}
+
+cleanup() {
+    sed  -e '/^Processed [0-9]\+ csets from [0-9]\+ developers$/d' | \
+    sed  -e '/^[0-9]\+ employers found$/d'
+}
+
+ACTUAL_MAILMAP_MD5=$(md5sum "$(git config --get mailmap.file)" 2>/dev/null | sed -e 's/  .*//')
+DESIRED_MAILMAP_MD5=$(md5sum "$(dirname "$0")/gitdm/mailmap" | sed -e 's/  .*//')
+
+if [ "$ACTUAL_MAILMAP_MD5" != "$DESIRED_MAILMAP_MD5" ]; then
+    echo "Please execute this before running the command:"
+    echo "  git config --global mailmap.file" "$(realpath "$(dirname "$0")/gitdm/mailmap")"
+    exit 1
+fi
+
+if [ "$DRY_RUN" = 1 ]; then
+    collect_changes "$@"
+else
+    set -o pipefail
+    echo -e "### Statistics\n"
+    collect_changes "$@" | python3 "$(dirname "$0")"/gitdm/gitdm/gitdm -s -b "$(dirname "$0")"/gitdm -l 10 | post_process | cleanup
+fi

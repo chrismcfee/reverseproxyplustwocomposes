@@ -1,11 +1,10 @@
-#!/usr/bin/python
-# Copyright 2017 Northern.tech AS
+# Copyright 2022 Northern.tech AS
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        https://www.apache.org/licenses/LICENSE-2.0
+#        http://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
 #    distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,48 +12,82 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from fabric.api import *
-import pytest
-from common import *
-from common_docker import *
-from common_setup import *
-from helpers import Helpers
-from MenderAPI import auth, adm, deploy, image, logger
-from common_update import common_update_procedure
-from mendertesting import MenderTesting
 import subprocess
-import sys
-sys.path.insert(0, '..')
-import conftest
 import contextlib
 import ssl
 import socket
 import time
 
-class TestSecurity(MenderTesting):
+import pytest
 
-    @pytest.mark.usefixtures("running_custom_production_setup")
-    def test_ssl_only(self):
+from .. import conftest
+from ..common_setup import (
+    running_custom_production_setup,
+    standard_setup_with_short_lived_token,
+    enterprise_with_short_lived_token,
+)
+from .common_update import common_update_procedure
+from .mendertesting import MenderTesting
+from ..MenderAPI import DeviceAuthV2, Deployments, logger
+
+
+class BaseTestSecurity(MenderTesting):
+    def do_test_token_token_expiration(self, env, valid_image_with_mender_conf):
+        """verify that an expired token is handled correctly (client gets a new, valid one)
+        and that deployments are still recieved by the client
+        """
+        mender_device = env.device
+        devauth = DeviceAuthV2(env.auth)
+        deploy = Deployments(env.auth, devauth)
+
+        mender_device.run(
+            'journalctl -u %s -l --no-pager | grep "received new authorization data"'
+            % mender_device.get_client_service_name(),
+            wait=60,
+        )
+
+        # this call verifies that the deployment process goes into an "inprogress" state
+        # which is only possible when the client has a valid token.
+        mender_conf = mender_device.run("cat /etc/mender/mender.conf")
+        common_update_procedure(
+            install_image=valid_image_with_mender_conf(mender_conf),
+            devauth=devauth,
+            deploy=deploy,
+        )
+
+
+class TestSecurityOpenSource(BaseTestSecurity):
+    def test_ssl_only(self, running_custom_production_setup):
         """ make sure we are not exposing any non-ssl connections in production environment """
         done = False
         sleep_time = 2
         # start production environment
-        subprocess.call(["./production_test_env.py", "--start",
-                         "--docker-compose-instance", conftest.docker_compose_instance])
+        subprocess.call(
+            [
+                "./production_test_env.py",
+                "--start",
+                "--docker-compose-instance",
+                running_custom_production_setup.name,
+            ]
+        )
 
         try:
 
             # get all exposed ports from docker
 
             for _ in range(3):
-                exposed_hosts = subprocess.check_output("docker ps | grep %s | grep -o -E '0.0.0.0:[0-9]*' | cat"
-                                                        % conftest.docker_compose_instance,
-                                                        shell=True)
+                exposed_hosts = subprocess.check_output(
+                    "docker ps | grep %s | grep -o -E '0.0.0.0:[0-9]*' | cat"
+                    % running_custom_production_setup.name,
+                    shell=True,
+                ).decode()
 
                 try:
                     for host in exposed_hosts.split():
-                        with contextlib.closing(ssl.wrap_socket(socket.socket())) as sock:
-                            logging.info("%s: connect to host with TLS" % host)
+                        with contextlib.closing(
+                            ssl.wrap_socket(socket.socket())
+                        ) as sock:
+                            logger.info("%s: connect to host with TLS" % host)
                             host, port = host.split(":")
                             sock.connect((host, int(port)))
                             done = True
@@ -71,35 +104,27 @@ class TestSecurity(MenderTesting):
 
         finally:
             # tear down production env
-            subprocess.call(["./production_test_env.py", "--kill",
-                             "--docker-compose-instance", conftest.docker_compose_instance])
+            subprocess.call(
+                [
+                    "./production_test_env.py",
+                    "--kill",
+                    "--docker-compose-instance",
+                    running_custom_production_setup.name,
+                ]
+            )
+
+    def test_token_token_expiration(
+        self, standard_setup_with_short_lived_token, valid_image_with_mender_conf
+    ):
+        self.do_test_token_token_expiration(
+            standard_setup_with_short_lived_token, valid_image_with_mender_conf
+        )
 
 
-    @pytest.mark.usefixtures("standard_setup_with_short_lived_token")
-    def test_token_token_expiration(self):
-        """ verify that an expired token is handled correctly (client gets a new, valid one)
-            and that deployments are still recieved by the client
-        """
-
-        if not env.host_string:
-            execute(self.test_token_token_expiration,
-                    hosts=get_mender_clients())
-            return
-
-        timeout_time = int(time.time()) + 60
-        while int(time.time()) < timeout_time:
-            with quiet():
-                output = run("journalctl -u mender -l --no-pager | grep \"received new authorization data\"")
-                time.sleep(1)
-
-            if output.return_code == 0:
-                logging.info("mender logs indicate new authorization data available")
-                break
-
-        if timeout_time <= int(time.time()):
-            pytest.fail("timed out waiting for download retries")
-
-
-        # this call verifies that the deployment process goes into an "inprogress" state
-        # which is only possible when the client has a valid token.
-        common_update_procedure(install_image=conftest.get_valid_image())
+class TestSecurityEnterprise(BaseTestSecurity):
+    def test_token_token_expiration(
+        self, enterprise_with_short_lived_token, valid_image_with_mender_conf
+    ):
+        self.do_test_token_token_expiration(
+            enterprise_with_short_lived_token, valid_image_with_mender_conf
+        )

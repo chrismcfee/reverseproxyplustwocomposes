@@ -1,0 +1,37 @@
+*.log
+*.pyc
+
+
+tags
+
+/release-state.yml
+/mender-demo-artifact.mender
+
+/docker-compose.testing.yml
+
+__pycache__
+.cache
+artifacts
+core-image-full-*
+large_image.dat
+update.mender
+
+# Mac specific junk files
+.DS_Store
+# folders for local testing dependencies
+node_modules
+venv
+
+# Emacs directory local variables
+.dir-locals.el
+
+# Test tools, overrides and reports
+backend-tests/downloaded-tools/
+docker-compose.override.yml
+backend-tests/acceptance.*
+backend-tests/report_backend_integration_enterprise.html
+backend-tests/results_backend_integration_enterprise.xml
+
+# direnv Python virtualenv setup
+*.direnv
+*.envrc

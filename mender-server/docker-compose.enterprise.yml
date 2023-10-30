@@ -1,0 +1,120 @@
+version: '2.1'
+services:
+
+    # redis cache
+    mender-redis:
+        image: redis:6.0.5-alpine
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+
+    # subsitute services with 'enterprise' versions
+    mender-deployments:
+        image: registry.mender.io/mendersoftware/deployments-enterprise:mender-3.4.0
+        environment:
+            DEPLOYMENTS_ENABLE_AUDIT: 1
+
+    mender-inventory:
+        image: registry.mender.io/mendersoftware/inventory-enterprise:mender-3.4.0
+
+    mender-workflows-server:
+        image: registry.mender.io/mendersoftware/workflows-enterprise:mender-3.4.0
+
+    mender-workflows-worker:
+        image: registry.mender.io/mendersoftware/workflows-enterprise-worker:mender-3.4.0
+        environment:
+            HAVE_AUDITLOGS: 1
+            HAVE_DEVICECONFIG: 1
+            DEVICECONFIG_ADDR: "mender-deviceconfig:8080"
+
+    # add services
+    mender-tenantadm:
+        image: registry.mender.io/mendersoftware/tenantadm:mender-3.4.0
+        environment:
+            TENANTADM_ORCHESTRATOR_ADDR: http://mender-workflows-server:8080/
+            TENANTADM_ENABLE_SELF_SERVICE_SIGN_UP: 1
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+        depends_on:
+            - mender-mongo
+
+    # configure the rest
+    mender-device-auth:
+        image: registry.mender.io/mendersoftware/deviceauth-enterprise:mender-3.4.0
+        environment:
+            DEVICEAUTH_REDIS_ADDR: "mender-redis:6379"
+            DEVICEAUTH_REDIS_USERNAME: ""
+            DEVICEAUTH_REDIS_PASSWORD: ""
+            DEVICEAUTH_REDIS_DB: "1"
+            DEVICEAUTH_REDIS_TIMEOUT_SEC: "1"
+            DEVICEAUTH_REDIS_LIMITS_EXPIRE_SEC: "3600"
+            DEVICEAUTH_TENANTADM_ADDR: 'http://mender-tenantadm:8080'
+            DEVICEAUTH_HAVE_ADDONS: 1
+            DEVICEAUTH_ENABLE_AUDIT: 1
+
+    mender-useradm:
+        image: registry.mender.io/mendersoftware/useradm-enterprise:mender-3.4.0
+        environment:
+            USERADM_REDIS_ADDR: "mender-redis:6379"
+            USERADM_REDIS_USERNAME: ""
+            USERADM_REDIS_PASSWORD: ""
+            USERADM_REDIS_DB: "2"
+            USERADM_REDIS_TIMEOUT_SEC: "1"
+            USERADM_REDIS_LIMITS_EXPIRE_SEC: "3600"
+            USERADM_TENANTADM_ADDR: 'http://mender-tenantadm:8080'
+            USERADM_HAVE_ADDONS: 1
+            USERADM_ENABLE_AUDIT: 1
+
+    mender-auditlogs:
+        image: registry.mender.io/mendersoftware/auditlogs:mender-3.4.0
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+        depends_on:
+            - mender-mongo
+        command: server --automigrate
+        labels:
+            mender.healthcheck.path: "/api/internal/v1/auditlogs/health"
+
+    mender-api-gateway:
+        volumes:
+            - ./config/traefik/traefik.enterprise.yaml:/etc/traefik/config/traefik.enterprise.yaml:ro
+
+    mender-gui:
+        environment:
+            HAVE_MULTITENANT: 1
+            HAVE_ENTERPRISE: 1
+            HAVE_AUDITLOGS: 1
+            HAVE_DEVICECONFIG: 1
+            HAVE_MONITOR: 1
+
+    mender-deviceconfig:
+        environment:
+            DEVICECONFIG_ENABLE_AUDIT: 1
+
+    mender-deviceconnect:
+        environment:
+            DEVICECONNECT_ENABLE_AUDIT: 1
+
+    mender-devicemonitor:
+        image: registry.mender.io/mendersoftware/devicemonitor:mender-3.4.0
+        command: server --automigrate
+        extends:
+            file: common.yml
+            service: mender-base
+        networks:
+            - mender
+        depends_on:
+            - mender-mongo
+        labels:
+            mender.healthcheck.path: "/api/internal/v1/devicemonitor/health"
+
+networks:
+    mender: null

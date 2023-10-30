@@ -8,6 +8,11 @@ SERVICES="\
   mender-useradm \
   mender-device-auth \
   mender-deployments \
+  mender-create-artifact-worker \
+  mender-workflows-server \
+  mender-workflows-worker \
+  mender-deviceconnect \
+  mender-deviceconfig \
 "
 
 DB_SERVICES="\

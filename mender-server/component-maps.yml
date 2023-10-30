@@ -1,0 +1,703 @@
+# A map that lists all our git repositories, docker images, and docker container
+# names, and how they are associated to one another. When you add something to
+# this list, make sure to add it to all three sections: "git", "docker_image"
+# and "docker_container". Binary tools that don't have Docker components, will
+# only have the "git" part.
+
+git:
+
+  mender-gateway:
+    docker_image:
+      - mender-gateway-qemu-commercial
+    docker_container:
+      - mender-gateway
+    release_component: true
+    independent_component: true
+
+  mender-convert:
+    docker_image: []
+    docker_container: []
+    release_component: true
+    independent_component: true
+
+  mender-binary-delta:
+    docker_image: []
+    docker_container: []
+    release_component: true
+    independent_component: true
+
+  mender-configure-module:
+    docker_image:
+    - mender-client-qemu
+    - mender-client-qemu-rofs
+    - mender-client-docker-addons
+    - mender-monitor-qemu-commercial
+    docker_container: []
+    release_component: true
+    independent_component: true
+
+  iot-manager:
+    docker_image:
+    - iot-manager
+    docker_container:
+    - mender-iot-manager
+    release_component: true
+
+  deployments:
+    docker_image:
+    - deployments
+    docker_container:
+    - mender-deployments
+    release_component: true
+
+  deployments-enterprise:
+    docker_image:
+    - deployments-enterprise
+    docker_container:
+    - mender-deployments
+    release_component: true
+
+  deviceadm:
+    docker_image: []
+    docker_container: []
+    release_component: false
+
+  deviceauth:
+    docker_image:
+    - deviceauth
+    docker_container:
+    - mender-device-auth
+    release_component: true
+
+  deviceauth-enterprise:
+    docker_image:
+    - deviceauth-enterprise
+    docker_container:
+    - mender-device-auth
+    release_component: true
+
+  gui:
+    docker_image:
+    - gui
+    docker_container:
+    - mender-gui
+    release_component: true
+
+  integration:
+    docker_image:
+    - mender-client-docker-addons
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  inventory:
+    docker_image:
+    - inventory
+    docker_container:
+    - mender-inventory
+    release_component: true
+
+  inventory-enterprise:
+    docker_image:
+    - inventory-enterprise
+    docker_container:
+    - mender-inventory
+    release_component: true
+
+  mender:
+    docker_image:
+    - mender-client-qemu
+    - mender-client-qemu-rofs
+    - mender-client-docker
+    - mender-client-docker-addons
+    - mender-monitor-qemu-commercial
+    - mender-gateway-qemu-commercial
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: true
+
+  mender-api-gateway-docker:
+    docker_image:
+    - api-gateway
+    docker_container:
+    - mender-api-gateway
+    release_component: false
+
+  mender-artifact:
+    docker_image: []
+    docker_container: []
+    release_component: true
+    independent_component: true
+
+  mender-cli:
+    docker_image: []
+    docker_container: []
+    release_component: true
+    independent_component: true
+
+  mender-conductor:
+    docker_image:
+    - mender-conductor
+    - email-sender
+    docker_container:
+    - mender-conductor
+    - mender-email-sender
+    release_component: false
+
+  mender-conductor-enterprise:
+    docker_image:
+    - mender-conductor-enterprise
+    - org-welcome-email-preparer
+    docker_container:
+    - mender-conductor
+    - mender-org-welcome-email-preparer
+    release_component: false
+
+  tenantadm:
+    docker_image:
+    - tenantadm
+    docker_container:
+    - mender-tenantadm
+    release_component: true
+
+  useradm:
+    docker_image:
+    - useradm
+    docker_container:
+    - mender-useradm
+    release_component: true
+
+  useradm-enterprise:
+    docker_image:
+    - useradm-enterprise
+    docker_container:
+    - mender-useradm
+    release_component: true
+
+  workflows:
+    docker_image:
+    - workflows
+    - workflows-worker
+    docker_container:
+    - mender-workflows-server
+    - mender-workflows-worker
+    release_component: true
+
+  workflows-enterprise:
+    docker_image:
+    - workflows-enterprise
+    - workflows-enterprise-worker
+    docker_container:
+    - mender-workflows-server
+    - mender-workflows-worker
+    release_component: true
+
+  create-artifact-worker:
+    docker_image:
+    - create-artifact-worker
+    docker_container:
+    - mender-create-artifact-worker
+    release_component: true
+
+  auditlogs:
+    docker_image:
+    - auditlogs
+    docker_container:
+    - mender-auditlogs
+    release_component: true
+
+  mtls-ambassador:
+    docker_image:
+    - mtls-ambassador
+    docker_container:
+    - mtls-ambassador
+    release_component: true
+
+  deviceconnect:
+    docker_image:
+    - deviceconnect
+    docker_container:
+    - mender-deviceconnect
+    release_component: true
+
+  devicemonitor:
+    docker_image:
+    - devicemonitor
+    docker_container:
+    - mender-devicemonitor
+    release_component: true
+
+  mender-connect:
+    docker_image:
+    - mender-client-qemu
+    - mender-client-qemu-rofs
+    - mender-client-docker-addons
+    - mender-monitor-qemu-commercial
+    docker_container:
+      - mender-client
+    release_component: true
+    independent_component: true
+
+  deviceconfig:
+    docker_image:
+    - deviceconfig
+    docker_container:
+    - mender-deviceconfig
+    release_component: true
+
+  monitor-client:
+    docker_image:
+    - mender-monitor-qemu-commercial
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: true
+
+  reporting:
+    docker_image:
+    - reporting
+    docker_container:
+    - mender-reporting
+    - mender-reporting-indexer
+    release_component: false
+
+  meta-mender:
+    docker_image: []
+    docker_container: []
+    release_component: false
+    independent_component: true
+
+docker_image:
+
+  iot-manager:
+    git:
+    - iot-manager
+    docker_container:
+    - mender-iot-manager
+    release_component: true
+
+  deployments:
+    git:
+    - deployments
+    docker_container:
+    - mender-deployments
+    release_component: true
+
+  deployments-enterprise:
+    git:
+    - deployments-enterprise
+    docker_container:
+    - mender-deployments
+    release_component: true
+
+  deviceauth:
+    git:
+    - deviceauth
+    docker_container:
+    - mender-device-auth
+    release_component: true
+
+  deviceauth-enterprise:
+    git:
+    - deviceauth-enterprise
+    docker_container:
+    - mender-device-auth
+    release_component: true
+
+  gui:
+    git:
+    - gui
+    docker_container:
+    - mender-gui
+    release_component: true
+
+  inventory:
+    git:
+    - inventory
+    docker_container:
+    - mender-inventory
+    release_component: true
+
+  inventory-enterprise:
+    git:
+    - inventory-enterprise
+    docker_container:
+    - mender-inventory
+    release_component: true
+
+  mender-client-docker:
+    git:
+    - mender
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  mender-client-docker-addons:
+    git:
+    - integration
+    - mender
+    - mender-connect
+    - mender-configure-module
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  mender-client-qemu:
+    git:
+    - mender
+    - mender-connect
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  mender-client-qemu-rofs:
+    git:
+    - mender
+    - mender-connect
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  api-gateway:
+    git:
+    - mender-api-gateway-docker
+    docker_container:
+    - mender-api-gateway
+    release_component: false
+
+  mender-conductor:
+    git:
+    - mender-conductor
+    docker_container:
+    - mender-conductor
+    release_component: false
+
+  email-sender:
+    git:
+    - mender-conductor
+    docker_container:
+    - mender-email-sender
+    release_component: false
+
+  mender-conductor-enterprise:
+    git:
+    - mender-conductor-enterprise
+    docker_container:
+    - mender-conductor
+    release_component: false
+
+  org-welcome-email-preparer:
+    git:
+    - mender-conductor-enterprise
+    docker_container:
+    - mender-org-welcome-email-preparer
+    release_component: false
+
+  tenantadm:
+    git:
+    - tenantadm
+    docker_container:
+    - mender-tenantadm
+    release_component: true
+
+  useradm:
+    git:
+    - useradm
+    docker_container:
+    - mender-useradm
+    release_component: true
+
+  useradm-enterprise:
+    git:
+    - useradm-enterprise
+    docker_container:
+    - mender-useradm
+    release_component: true
+
+  workflows:
+    git:
+    - workflows
+    docker_container:
+    - mender-workflows-server
+    release_component: true
+
+  workflows-enterprise:
+    git:
+    - workflows-enterprise
+    docker_container:
+    - mender-workflows-server
+    release_component: true
+
+  workflows-worker:
+    git:
+    - workflows
+    docker_container:
+    - mender-workflows-worker
+    release_component: true
+
+  workflows-enterprise-worker:
+    git:
+    - workflows-enterprise
+    docker_container:
+    - mender-workflows-worker
+    release_component: true
+
+  create-artifact-worker:
+    git:
+    - create-artifact-worker
+    docker_container:
+    - mender-create-artifact-worker
+    release_component: true
+
+  auditlogs:
+    git:
+    - auditlogs
+    docker_container:
+    - mender-auditlogs
+    release_component: true
+
+  mtls-ambassador:
+    git:
+    - mtls-ambassador
+    docker_container:
+    - mtls-ambassador
+    release_component: true
+
+  deviceconnect:
+    git:
+    - deviceconnect
+    docker_container:
+    - mender-deviceconnect
+    release_component: true
+
+  devicemonitor:
+    git:
+    - devicemonitor
+    docker_container:
+    - mender-devicemonitor
+    release_component: true
+
+  deviceconfig:
+    git:
+    - deviceconfig
+    docker_container:
+    - mender-deviceconfig
+    release_component: true
+
+  mender-monitor-qemu-commercial:
+    git:
+    - monitor-client
+    - mender
+    - mender-connect
+    docker_container:
+    - mender-client
+    release_component: true
+    independent_component: false
+
+  mender-gateway-qemu-commercial:
+    git:
+    - mender-gateway
+    - mender
+    docker_container:
+    - mender-gateway
+    release_component: true
+    independent_component: false
+
+  reporting:
+    git:
+    - reporting
+    docker_container:
+    - mender-reporting
+    - mender-reporting-indexer
+    release_component: false
+
+docker_container:
+
+  mender-iot-manager:
+    git:
+    - iot-manager
+    docker_image:
+    - iot-manager
+    release_component: true
+
+  mender-deployments:
+    git:
+    - deployments
+    - deployments-enterprise
+    docker_image:
+    - deployments
+    - deployments-enterprise
+    release_component: true
+
+  mender-device-auth:
+    git:
+    - deviceauth
+    - deviceauth-enterprise
+    docker_image:
+    - deviceauth
+    - deviceauth-enterprise
+    release_component: true
+
+  mender-gui:
+    git:
+    - gui
+    docker_image:
+    - gui
+    release_component: true
+
+  mender-inventory:
+    git:
+    - inventory
+    - inventory-enterprise
+    docker_image:
+    - inventory
+    - inventory-enterprise
+    release_component: true
+
+  mender-client:
+    git:
+    - integration
+    - mender
+    - monitor-client
+    - mender-connect
+    docker_image:
+    - mender-client-docker
+    - mender-client-docker-addons
+    - mender-client-qemu
+    - mender-client-qemu-rofs
+    - mender-monitor-qemu-commercial
+    release_component: true
+
+  mender-api-gateway:
+    git:
+    - mender-api-gateway-docker
+    docker_image:
+    - api-gateway
+    release_component: false
+
+  mender-conductor:
+    git:
+    - mender-conductor
+    - mender-conductor-enterprise
+    docker_image:
+    - mender-conductor
+    - mender-conductor-enterprise
+    release_component: false
+
+  mender-email-sender:
+    git:
+    - mender-conductor
+    docker_image:
+    - email-sender
+    release_component: false
+
+  mender-org-welcome-email-preparer:
+    git:
+    - mender-conductor-enterprise
+    docker_image:
+    - org-welcome-email-preparer
+    release_component: false
+
+  mender-tenantadm:
+    git:
+    - tenantadm
+    docker_image:
+    - tenantadm
+    release_component: true
+
+  mender-useradm:
+    git:
+    - useradm
+    - useradm-enterprise
+    docker_image:
+    - useradm
+    - useradm-enterprise
+    release_component: true
+
+  mender-workflows-server:
+    git:
+    - workflows
+    - workflows-enterprise
+    docker_image:
+    - workflows
+    - workflows-enterprise
+    release_component: true
+
+  mender-workflows-worker:
+    git:
+    - workflows
+    - workflows-enterprise
+    docker_image:
+    - workflows-worker
+    - workflows-enterprise-worker
+    release_component: true
+
+  mender-create-artifact-worker:
+    git:
+    - create-artifact-worker
+    docker_image:
+    - create-artifact-worker
+    release_component: true
+
+  mender-auditlogs:
+    git:
+    - auditlogs
+    docker_image:
+    - auditlogs
+    release_component: true
+
+  mtls-ambassador:
+    git:
+    - mtls-ambassador
+    docker_image:
+    - mtls-ambassador
+    release_component: true
+
+  mender-deviceconnect:
+    git:
+    - deviceconnect
+    docker_image:
+    - deviceconnect
+    release_component: true
+
+  mender-devicemonitor:
+    git:
+    - devicemonitor
+    docker_image:
+    - devicemonitor
+    release_component: true
+
+  mender-deviceconfig:
+    git:
+    - deviceconfig
+    docker_image:
+    - deviceconfig
+    release_component: true
+
+  mender-reporting:
+    git:
+    - reporting
+    docker_image:
+    - reporting
+    release_component: false
+
+  mender-reporting-indexer:
+    git:
+    - reporting
+    docker_image:
+    - reporting
+    release_component: false
+
+  mender-gateway:
+    git:
+    - mender
+    - mender-gateway
+    docker_image:
+    - mender-gateway-qemu-commercial
+    release_component: true
