@@ -1,8 +1,5 @@
 version: '3'
 
-networks:
-  traefik:
-
 services:
   nginx:
     image: nginx:latest
@@ -28,6 +25,4 @@ services:
       - "traefik.http.routers.nginx.service=nginx"
       - "traefik.http.services.nginx.loadbalancer.server.port=8082"
       - "traefik.http.services.nginx.loadbalancer.server.port=8083"
-    networks:
-      - traefik
 

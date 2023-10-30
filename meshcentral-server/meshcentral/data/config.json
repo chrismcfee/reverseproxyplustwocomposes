@@ -4,7 +4,7 @@
     "cert": "localhost",
     "_WANonly": true,
     "_LANonly": true,
-    "_sessionKey": "MyReallySecretPassword1",
+    "sessionKey": "MyReallySecretPassword1kM4:>Tu,A$`4?cNnE|o^l0Hr|)?",
     "port": 443,
     "_aliasPort": 443,
     "redirPort": 80,
