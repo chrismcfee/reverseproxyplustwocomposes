@@ -20,6 +20,7 @@ services:
       - --certificatesresolvers.mytlschallenge.acme.tlschallenge=true
       - --certificatesresolvers.mytlschallenge.acme.email=chris@zignage.com
       - --certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json
+        #- --entrypoints.http.address=:80
     volumes:
       - ./letsencrypt:/letsencrypt # Volume for certs (TLS)
       - /var/run/docker.sock:/var/run/docker.sock # Volume for docker admin
@@ -27,6 +28,16 @@ services:
     networks:
       - web # Tell the container that it has access to this network
 
+    labels:
+      # enable traefik for this services
+      - traefik.enable=true
+      # Define the port inside of the Docker service to use
+      - traefik.web.services.traefik-dashboard.loadbalancer.server.port=8080
+      # Make Traefik use this domain in HTTP
+      - traefik.web.routers.traefik-dashboard-http.entrypoints=web
+      - traefik.web.routers.traefik-dashboard-http.rule=Host(`dashboard.localhost`)
+      # make traefik use this network
+      - traefik.docker.network=web
 networks:
   web:
     external: true

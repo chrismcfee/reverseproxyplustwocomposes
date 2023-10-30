@@ -52,6 +52,10 @@ services:
                - "traefik.http.routers.mesh-secured.service=mesh-secured" # Define new service named mesh secured on the route
                - "traefik.http.services.mesh-secured.loadbalancer.server.port=4430" # Tell traefik explicitly to use port 4430, traefik did not do this automatically in this case.
                - "traefik.http.routers.mesh-secured.tls.certresolver=mytlschallenge" # How to create certs
+               - "traefik.http.services.app.loadbalancer.server.port=8086"
+               - "traefik.http.routers.meshcentral.entrypoints=http"
+               - "traefik.http.routers.meshcentral.rule=Host(`meshcentral.localhost`)"
+               - "traefik.docker.network=web"
 
           networks:
                - meshcentral-tier

@@ -1,49 +1,38 @@
 {
-     "$schema": "http://info.meshcentral.com/downloads/meshcentral-config-schema.json",
-     "settings": {
-          "plugins": { "enabled": false },
-          "mongoDb": "mongodb://mongouser:mongopass@traefik.sobe.name:27017",
-          "_WANonly": false,
-          "_LANonly": false,
-          "_sessionKey": "mongopass",
-          "TLSOffload": true, 
-          "SelfUpdate": false,
-          "AllowFraming": false,
-          "WebRTC": false,
-
-          "Cert": "traefik.sobe.name", 
-
-          "Port": 4430,
-
-          "AliasPort": 443,
-
-          "RedirPort": 800,
-
-          "_redirAliasPort": 80,
-
-          "TlsOffload": "38.96.173.174" 
-     },
-
-     "domains": {
-
-          "": {
-
-               "_title": "Title1",
-
-               "_title2": "Title 2",
-
-               "minify": true,
-
-               "NewAccounts": true,
-
-               "localSessionRecording": false,
-
-               "_userNameIsEmail": true,
-
-               "certUrl": "traefik.sobe.name", 
-               "agentConfig": ["webSocketMaskOverride=1"] 
-          }
-
-     }
-
+  "$schema": "https://raw.githubusercontent.com/Ylianst/MeshCentral/master/meshcentral-config-schema.json",
+  "settings": {
+    "plugins":{"enabled": false},
+    "_mongoDb": "mongodb://mongouser:mongopass@mongodb:27017/meshcentral",
+    "cert": "traefik.sobe.name",
+    "_WANonly": true,
+    "_LANonly": false,
+    "sessionKey": "XRFTU82VZ9V7HJKUV5445MOLGK5AL3XHEDEB1TKJWAOYYD4N",
+    "port": 443,
+    "_aliasPort": 443,
+    "redirPort": 80,
+    "_redirAliasPort": 80,
+    "AgentPong": 300,
+    "TLSOffload": false,
+    "SelfUpdate": false,
+    "AllowFraming": false,
+    "WebRTC": false
+  },
+  "domains": {
+    "": {
+      "_title": "MyServer",
+      "_title2": "Servername",
+      "minify": true,
+      "NewAccounts": true,
+      "localSessionRecording": false,
+      "_userNameIsEmail": true,
+      "_certUrl": "traefik.sobe.name",
+      "AgentConfig": [ "webSocketMaskOverride=1" ]
+    }
+  },
+  "_letsencrypt": {
+    "__comment__": "Requires NodeJS 8.x or better, Go to https://letsdebug.net/ first before>",
+    "_email": "myemail@mydomain.com",
+    "_names": "myserver.mydomain.com",
+    "production": false
+  }
 }

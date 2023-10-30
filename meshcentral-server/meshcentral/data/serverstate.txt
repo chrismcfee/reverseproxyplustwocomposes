@@ -1,8 +1,0 @@
-time=1698679844936
-state=running
-server-pid=54
-server-parent-pid=8
-redirect-port=80
-mps-port=4433
-mps-name=38.96.173.174
-http-port=443

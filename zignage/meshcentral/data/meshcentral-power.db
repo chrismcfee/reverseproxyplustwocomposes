@@ -1,3 +1,0 @@
-{"$$indexCreated":{"fieldName":"nodeid","unique":false,"sparse":false}}
-{"$$indexCreated":{"fieldName":"time","unique":false,"sparse":false}}
-{"time":{"$$date":1698687096446},"nodeid":"*","power":0,"s":1,"_id":"c20oLOolWFvE0Vfm"}
