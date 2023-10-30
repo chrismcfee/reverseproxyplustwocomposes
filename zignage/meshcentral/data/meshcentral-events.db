@@ -1,0 +1,4 @@
+{"$$indexCreated":{"fieldName":"ids","unique":false,"sparse":false}}
+{"$$indexCreated":{"fieldName":"nodeid","unique":false,"sparse":true}}
+{"$$indexCreated":{"fieldName":"time","unique":false,"sparse":false}}
+{"etype":"server","action":"started","msg":"Server started","time":{"$$date":1698687114671},"ids":["*"],"_id":"pUxDZsLFR9dqr9t6"}

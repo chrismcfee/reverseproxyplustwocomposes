@@ -1,36 +1,49 @@
 {
-  "$schema": "http://info.meshcentral.com/downloads/meshcentral-config-schema.json",
-  "settings": {
-    "cert": "mesh.sobe.name",
-    "_WANonly": true,
-    "_LANonly": true,
-    "sessionKey": "MyReallySecretPassword1kM4:>Tu,A$`4?cNnE|o^l0Hr|)?",
-    "port": 443,
-    "_aliasPort": 443,
-    "redirPort": 80,
-    "_redirAliasPort": 80,
-    "AgentPong": 300,
-    "TLSOffload": false,
-    "SelfUpdate": false,
-    "AllowFraming": "false",
-    "mongodb": "mongodb://mongodb:27017/mesh",
-    "mongodbcol": "mesh",
-    "WebRTC": "true"
-  },
-  "domains": {
-        "": {
-        "_title": "MyServer",
-    "_title2": "Servername",
-    "_minify": true,
-    "NewAccounts": "true",
-     "_userNameIsEmail": true,
-     "certURL":"https://mesh.sobe.name:443/"
-        }
-  },
-  "_letsencrypt": {
-    "__comment__": "Requires NodeJS 8.x or better, Go to https://letsdebug.net/ first before>",
-    "_email": "myemail@mydomain.com",
-    "_names": "myserver.mydomain.com",
-        "production": false
-  }
+     "$schema": "http://info.meshcentral.com/downloads/meshcentral-config-schema.json",
+     "settings": {
+          "plugins": { "enabled": false },
+          "mongoDb": "mongodb://mongouser:mongopass@traefik.sobe.name:27017",
+          "_WANonly": false,
+          "_LANonly": false,
+          "_sessionKey": "mongopass",
+          "TLSOffload": true, 
+          "SelfUpdate": false,
+          "AllowFraming": false,
+          "WebRTC": false,
+
+          "Cert": "traefik.sobe.name", 
+
+          "Port": 4430,
+
+          "AliasPort": 443,
+
+          "RedirPort": 800,
+
+          "_redirAliasPort": 80,
+
+          "TlsOffload": "38.96.173.174" 
+     },
+
+     "domains": {
+
+          "": {
+
+               "_title": "Title1",
+
+               "_title2": "Title 2",
+
+               "minify": true,
+
+               "NewAccounts": true,
+
+               "localSessionRecording": false,
+
+               "_userNameIsEmail": true,
+
+               "certUrl": "traefik.sobe.name", 
+               "agentConfig": ["webSocketMaskOverride=1"] 
+          }
+
+     }
+
 }

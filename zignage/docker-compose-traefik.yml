@@ -1,70 +1,33 @@
-version: '3.3'
-
+version: '3'
 services:
-    reverse-proxy:
-        restart: always
-        logging:
-            options:
-                max-size: "100m"
-                max-file: "3"
-        networks:
-            - znet
-            - web
-        image: traefik:2.9.4
-        ports:
-            - 80:80
-            - 443:443
-            - 8080:8080
-            - 9002:9002
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-            - /srv/traefik:/configuration
-            - /srv/zignage/ssl:/etc/ssl
-            - ./letsencrypt:/letsencrypt # Volume for certs (TLS)
-            - ./dynamic.yaml:/dynamic.yaml # Volume for dynamic conf file, **ref: line 14
-
-        command:
-            - --log.level=DEBUG
-            - --api.insecure=true
-            - --api.dashboard=true
-            - --api.debug=true
-            - --entrypoints.web.address=:80
-            - --entrypoints.websecure.address=:443
-            - --entrypoints.other.address=:9002
-            - --entrypoints.web.http.redirections.entryPoint.to=websecure
-            - --entrypoints.web.http.redirections.entryPoint.scheme=https
-            - --entrypoints.web.http.redirections.entryPoint.permanent=true
-            - --entrypoints.web.forwardedHeaders.insecure
-            - --entryPoints.websecure.forwardedHeaders.insecure
-            - --entryPoints.other.forwardedHeaders.insecure
-            - --providers.docker=true
-            - --providers.file.directory=/configuration/
-            - --providers.file.watch=true
-            - --serverstransport.insecureskipverify=true
-            - --metrics.prometheus.addEntryPointsLabels=true
-            - --metrics.prometheus.addServicesLabels=true
-            - --metrics.prometheus=true
-            - --providers.docker.exposedbydefault=false # You need to whitelist containers that will be exposed to traefik
-            - --providers.file.filename=/dynamic.yaml # Referring to the https upgrade middleware file
-            - --providers.docker.network=web # Use the docker network web for communication between traefik and containser
-            ## Entrypoints Settings - https://docs.traefik.io/routing/entrypoints/#configuration ##
-            ## Certificate Settings (Let's Encrypt) -  https://docs.traefik.io/https/acme/#configuration-examples ##
-            - --certificatesresolvers.mytlschallenge.acme.tlschallenge=true
-            - --certificatesresolvers.mytlschallenge.acme.email=chris@zignage.com # Your email
-            - --certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json
-        labels:
-            - "traefik.enabled=true"
-            - "traefik.http.services.meshcentral.loadbalancer.server.port=80"
-            - "traefik.http.routers.meshcentral.entrypoints=web,websecure"
-            - "traefik.http.routers.meshcentral.rule(HostRegexp(`{catchall:.*}`) && PathPrefix(`/mesh`))"
-            - "traefik.http.routers.meshcentral.tls=true"
-            - "traefik.http.routers.ping.entrypoints=web,websecure"
-            - "traefik.http.routers.ping.rule=(HostRegexp(`{catchall:.*}`) && PathPrefix(`/ping`))"
-            - "traefik.http.routers.ping.tls=true"
+  traefik:
+    image: traefik:v2.0
+    restart: always
+    container_name: traefik
+    ports:
+      - '80:80' # http
+      - '443:443' # https
+    command:
+      ## Provider Settings - https://docs.traefik.io/providers/docker/#provider-configuration ##
+      - --providers.docker=true # Set docker as the provider for traefik
+      - --providers.docker.exposedbydefault=false # You need to whitelist containers that will be exposed to traefik
+      - --providers.file.filename=/dynamic.yml # Referring to the https upgrade file
+      - --providers.docker.network=web # Use the docker network web for communication between traefik and containser
+      ## Entrypoints Settings - https://docs.traefik.io/routing/entrypoints/#configuration ##
+      - --entrypoints.web.address=:80 # Define an entrypoint for port :80 named web (this can be whatever)
+      - --entrypoints.web-secured.address=:443 # Define an entrypoint for https on port :443 named web-secured (this can be whatever)
+      ## Certificate Settings (Let's Encrypt) -  https://docs.traefik.io/https/acme/#configuration-examples ##
+      - --certificatesresolvers.mytlschallenge.acme.tlschallenge=true
+      - --certificatesresolvers.mytlschallenge.acme.email=chris@zignage.com
+      - --certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json
+    volumes:
+      - ./letsencrypt:/letsencrypt # Volume for certs (TLS)
+      - /var/run/docker.sock:/var/run/docker.sock # Volume for docker admin
+      - ./dynamic.yml:/dynamic.yml # Volume for dynamic conf file, **ref: line 14
+    networks:
+      - web # Tell the container that it has access to this network
 
 networks:
-    znet:
-        internal: false
-        driver: bridge
-    web:
-        external: true
+  web:
+    external: true
+
