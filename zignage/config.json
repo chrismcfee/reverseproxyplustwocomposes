@@ -1,9 +1,9 @@
 {
   "$schema": "http://info.meshcentral.com/downloads/meshcentral-config-schema.json",
   "settings": {
-    "cert": "localhost",
-    "_WANonly": false,
-    "_LANonly": false,
+    "cert": "mesh.sobe.name",
+    "_WANonly": true,
+    "_LANonly": true,
     "sessionKey": "MyReallySecretPassword1kM4:>Tu,A$`4?cNnE|o^l0Hr|)?",
     "port": 443,
     "_aliasPort": 443,
@@ -24,7 +24,7 @@
     "_minify": true,
     "NewAccounts": "true",
      "_userNameIsEmail": true,
-     "certURL":"38.96.173.174"
+     "certURL":"https://mesh.sobe.name:443/"
         }
   },
   "_letsencrypt": {
