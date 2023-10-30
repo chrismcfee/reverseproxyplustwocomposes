@@ -32,7 +32,7 @@ services:
           depends_on:
                - mongodb
           ports:
-               - 8086:4430
+               - 4430:4430
           volumes: # The volumes will be created automaticly if they do not exists. The only directory that should exist when installing fresh is is meshcentral/data
                # config.json and other important files live here. A must for data persistence
                - ./meshcentral/data:/opt/meshcentral/meshcentral-data
@@ -46,11 +46,11 @@ services:
               - "traefik.enable=true"
               - "traefik.http.routers.meshcentral-web.rule=Host(`traefik.sobe.name`)"
               - "traefik.http.routers.meshcentral-web.entrypoints=web"
-              - "traefik.http.routers.meshcentral-web.middlewares=redirect@file"
+              #- "traefik.http.routers.meshcentral-web.middlewares=redirect@file"
               - "traefik.http.routers.meshcentral-secured.rule=Host(`traefik.sobe.name`)"
               - "traefik.http.routers.meshcentral-secured.entrypoints=web-secured"
               - "traefik.http.routers.meshcentral-secured.tls.certresolver=mytlschallenge"
-              - "traefik.http.services.meshcentral.loadbalancer.server.port=8086"
+              - "traefik.http.services.meshcentral.loadbalancer.server.port=4430"
               - "traefik.docker.network=web"
 
 
