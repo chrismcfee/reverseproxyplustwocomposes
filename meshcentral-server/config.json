@@ -3,14 +3,14 @@
   "settings": {
     "cert": "localhost",
     "_WANonly": true,
-    "_LANonly": false,
+    "_LANonly": true,
     "sessionKey": "MyReallySecretPassword1kM4:>Tu,A$`4?cNnE|o^l0Hr|)?",
     "port": 443,
     "_aliasPort": 443,
     "redirPort": 80,
     "_redirAliasPort": 80,
     "AgentPong": 300,
-    "TLSOffload": true,
+    "TLSOffload": false,
     "SelfUpdate": false,
     "AllowFraming": "false",
     "mongodb": "mongodb://mongodb:27017/mesh",
@@ -23,8 +23,8 @@
     "_title2": "Servername",
     "_minify": true,
     "NewAccounts": "true",
-        "_userNameIsEmail": true,
-    "certUrl": "https://boi.sobe.name"
+     "_userNameIsEmail": true,
+     "certURL":"173.255.228.219"
         }
   },
   "_letsencrypt": {
@@ -34,4 +34,3 @@
         "production": false
   }
 }
-

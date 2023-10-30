@@ -23,8 +23,8 @@
     "_title2": "Servername",
     "_minify": true,
     "NewAccounts": "true",
-        "_userNameIsEmail": true,
-    "certUrl": "https://localhost:8084"
+     "_userNameIsEmail": true,
+     "certURL":"173.255.228.219"
         }
   },
   "_letsencrypt": {
