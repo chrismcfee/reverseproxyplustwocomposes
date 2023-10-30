@@ -27,7 +27,7 @@ services:
       - "traefik.http.routers.nginx.priority=1"
       - "traefik.http.routers.nginx.service=nginx"
       - "traefik.http.services.nginx.loadbalancer.server.port=8082"
+      - "traefik.http.services.nginx.loadbalancer.server.port=8083"
     networks:
       - traefik
-
 

@@ -1,0 +1,29 @@
+
+[tool.black]
+target-version = ['py38']
+include = '''
+(
+  /(
+      backend-tests
+    | testutils
+    | tests
+    | extra
+  )/.*\.py$
+  | extra/changelog-generator/changelog-generator
+)
+'''
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories
+    | \.git
+    | \.mypy_cache
+    | .*\.venv
+    | .*venv
+    | _build
+    | build
+    | dist
+    | extra/gitdm
+  )/
+)
+'''

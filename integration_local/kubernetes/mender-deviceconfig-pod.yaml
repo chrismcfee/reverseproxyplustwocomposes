@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kompose.cmd: kompose -f ../docker-compose.yml convert -y
+    kompose.version: 1.31.2 (a92241f79)
+    mender.healthcheck.path: /api/internal/v1/deviceconfig/health
+  creationTimestamp: null
+  labels:
+    io.kompose.network/integration-local-mender: "true"
+    io.kompose.service: mender-deviceconfig
+  name: mender-deviceconfig
+spec:
+  containers:
+    - args:
+        - server
+        - --automigrate
+      image: mendersoftware/deviceconfig:mender-3.6.2
+      name: mender-deviceconfig
+      resources: {}
+  restartPolicy: OnFailure
+status: {}
