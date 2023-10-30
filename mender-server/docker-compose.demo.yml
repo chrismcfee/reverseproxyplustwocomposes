@@ -24,7 +24,7 @@ services:
     mender-api-gateway:
         ports:
             - 8082:8082
-            - 8083:8083
+            - 8084:8084
             - 8080:8080
         command:
             - --accesslog=true
@@ -33,7 +33,7 @@ services:
             - --entrypoints.http.address=:8082
             - --entrypoints.http.http.redirections.entryPoint.scheme=https
             - --entrypoints.http.http.redirections.entryPoint.to=https
-            - --entrypoints.https.address=:8083
+            - --entrypoints.https.address=:8084
             - --entryPoints.https.transport.respondingTimeouts.idleTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.readTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.writeTimeout=7200
@@ -43,7 +43,7 @@ services:
         environment:
             MENDER_DEMO: "true"
             TRAEFIK_API: "true"
-            ALLOWED_HOSTS: localhost:8083, docker.mender.io:8083, 127.0.0.1:8083, boi.sobe.name:8083, localhost/mender:8083, docker.mender.io/mender:8083, 127.0.0.1/mender:8083, boi.sobe.name/mender:8083
+            ALLOWED_HOSTS: localhost:8084, docker.mender.io:8084, 127.0.0.1:8084, boi.sobe.name:8084, localhost/mender:8084, docker.mender.io/mender:8084, 127.0.0.1/mender:8084, boi.sobe.name/mender:8084
         networks:
             mender:
                 aliases:

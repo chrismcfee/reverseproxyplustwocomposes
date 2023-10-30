@@ -82,7 +82,7 @@ services:
             - --entrypoints.http.address=:8082
             - --entrypoints.http.http.redirections.entryPoint.scheme=https
             - --entrypoints.http.http.redirections.entryPoint.to=https
-            - --entrypoints.https.address=:8083
+            - --entrypoints.https.address=:8084
             - --entryPoints.https.transport.respondingTimeouts.idleTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.readTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.writeTimeout=7200

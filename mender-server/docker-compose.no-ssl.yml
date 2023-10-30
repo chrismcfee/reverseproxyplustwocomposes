@@ -9,7 +9,7 @@ services:
             - --providers.docker=true
             - --providers.docker.exposedbydefault=false
             - --entrypoints.http.address=:8082
-            - --entrypoints.https.address=:8083
+            - --entrypoints.https.address=:8084
             - --entryPoints.https.transport.respondingTimeouts.idleTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.readTimeout=7200
             - --entryPoints.https.transport.respondingTimeouts.writeTimeout=7200

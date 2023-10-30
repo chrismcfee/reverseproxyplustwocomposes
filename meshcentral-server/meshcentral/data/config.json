@@ -2,8 +2,8 @@
   "$schema": "http://info.meshcentral.com/downloads/meshcentral-config-schema.json",
   "settings": {
     "cert": "localhost",
-    "_WANonly": true,
-    "_LANonly": true,
+    "_WANonly": false,
+    "_LANonly": false,
     "sessionKey": "MyReallySecretPassword1kM4:>Tu,A$`4?cNnE|o^l0Hr|)?",
     "port": 443,
     "_aliasPort": 443,
@@ -15,7 +15,7 @@
     "AllowFraming": "false",
     "mongodb": "mongodb://mongodb:27017/mesh",
     "mongodbcol": "mesh",
-    "WebRTC": "false"
+    "WebRTC": "true"
   },
   "domains": {
         "": {
@@ -24,7 +24,7 @@
     "_minify": true,
     "NewAccounts": "true",
      "_userNameIsEmail": true,
-     "certURL":"173.255.228.219"
+     "certURL":"69.164.212.154"
         }
   },
   "_letsencrypt": {
