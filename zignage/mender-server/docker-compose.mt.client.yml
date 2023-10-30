@@ -1,0 +1,12 @@
+version: '2.1'
+services:
+
+    #
+    # mender-client
+    #
+    mender-client:
+        networks:
+            - mender
+        environment:
+            - SERVER_URL=$SERVER_URL
+            - TENANT_TOKEN=$TENANT_TOKEN

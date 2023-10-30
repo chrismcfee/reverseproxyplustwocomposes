@@ -1,0 +1,13 @@
+version: '2.1'
+services:
+
+    mender-device-auth:
+        environment:
+            DEVICEAUTH_DEFAULT_TENANT_TOKEN: $DEFAULT_TENANT_TOKEN
+        volumes:
+            - ./keys/deviceauth/private.key:/etc/deviceauth-enterprise/rsa/private.pem:ro
+
+    mender-tenantadm:
+        environment:
+            TENANTADM_ORCHESTRATOR_ADDR: http://mender-workflows-server:8080/
+            TENANTADM_STRIPE_API_KEY: ${STRIPE_API_KEY}

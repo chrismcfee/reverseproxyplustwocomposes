@@ -38,6 +38,7 @@ services:
       - traefik.web.routers.traefik-dashboard-http.rule=Host(`dashboard.localhost`)
       # make traefik use this network
       - traefik.docker.network=web
+      #- traefik.web.routers.traefik-
 networks:
   web:
     external: true

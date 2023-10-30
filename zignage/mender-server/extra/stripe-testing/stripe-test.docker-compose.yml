@@ -1,0 +1,9 @@
+version: '2.1'
+services:
+
+    mender-tenantadm:
+        environment:
+            TENANTADM_STRIPE_API_KEY: ${STRIPE_API_KEY}
+
+networks:
+    mender:
