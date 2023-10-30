@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  reverse-proxy:
+    restart: always
+    image: traefik:latest
+    ports:
+    - "443:443"
+    - "80:80"
+    volumes:
+    - /srv/traefik.toml:/etc/traefik/traefik.toml
+    - /srv/services.toml:/etc/traefik/services.toml
+    - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+    - "traefik.http.routers.api.rule=Host(`mesh.sobe.name`)"
+    - "traefik.http.routers.api.service=api@internal"
+    - "traefik.http.routers.api.entrypoints=http"
+    - "traefik.http.routers.api.middlewares=auth"
+    - "traefik.http.middlewares.auth.basicauth.users=chris:Z1gnage123456"
+
+    - "traefik.http.routers.main.entrypoints=https,http"
+    - "traefik.http.routers.main.rule=Host(`mesh.sobe.name`)"
+    - "traefik.http.routers.main.service=nas@file"
+    - "traefik.http.routers.main.tls=true"
+    - "traefik.http.routers.main.tls.certresolver=chris"

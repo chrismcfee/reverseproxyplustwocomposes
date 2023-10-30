@@ -1,0 +1,6 @@
+[http]
+  [http.services]
+    [http.services.main]
+      [http.services.main.loadBalancer]
+        [[http.services.main.loadBalancer.servers]]
+          url = "http://38.96.173.174:8083/"

@@ -182,7 +182,7 @@ env_setup() {
         MENDER_SERVER_URI="http://localhost"
     fi
 
-    USER='admin@zignage.com'
+    USER='chris@zignage.com'
     PASSWORD='Zignage12345'
 }
 

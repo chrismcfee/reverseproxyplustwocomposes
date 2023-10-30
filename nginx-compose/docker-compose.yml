@@ -27,9 +27,3 @@ services:
       - "traefik.http.routers.nginx.service=nginx"
       - "traefik.http.services.nginx.loadbalancer.server.port=8082"
       - "traefik.http.services.nginx.loadbalancer.server.port=8083"
-
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - ./certbot/www/:/var/www/certbot/:rw
-      - ./certbot/conf/:/etc/letsencrypt/:rw

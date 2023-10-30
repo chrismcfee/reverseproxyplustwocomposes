@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx_container
+    environment:
+      - NGINX_HOST=nginx.docker.localhost
+    hostname: nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    command: /bin/bash -c "mkdir -p /etc/nginx/conf.d/sitesenabled && cd /etc/nginx/conf.d/sitesenabled && ln -s ../sites-available/*.conf . && nginx -g 'daemon off;'"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-selfsigned.crt:/etc/nginx/ssl/nginx-selfsigned.crt:ro
+      - ./nginx-selfsigned.key:/etc/nginx/ssl/nginx-selfsigned.key:ro
+      - ./nginx-meshcentral-service.conf:/etc/nginx/conf.d/sites-available/mesh.conf
+      - ./nginx-mender-service.conf:/etc/nginx/conf.d/sites-available/mender.conf
+      - ./certbot/www/:/var/www/certbot/:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.nginx.rule=HostRegexp('{domain:.+)')"
+      - "traefik.http.routers.nginx.priority=1"
+      - "traefik.http.routers.nginx.service=nginx"
+      - "traefik.http.services.nginx.loadbalancer.server.port=8082"
+      - "traefik.http.services.nginx.loadbalancer.server.port=8083"
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/www/:/var/www/certbot/:rw
+      - ./certbot/conf/:/etc/letsencrypt/:rw

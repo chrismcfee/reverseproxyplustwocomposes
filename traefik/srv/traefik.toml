@@ -1,0 +1,19 @@
+[entryPoints]
+  [entryPoints.http]
+  address = ":80"
+  [entryPoints.https]
+  address = ":443"
+
+[api]
+
+[providers.docker]
+  endpoint = "unix:///var/run/docker.sock"
+
+[providers.file]
+  filename = "/etc/traefik/services.toml"
+
+[certificatesResolvers.wilson.acme]
+  email = "chris@zignage.com"
+  storage = "acme.json"
+  [certificatesResolvers.wilson.acme.httpChallenge]
+    entryPoint = "http"
